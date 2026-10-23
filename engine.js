@@ -1,5 +1,6 @@
 import {bgmSimilarity,validBgm,extractBgm} from './bgm.js';
 export const VERSION = 'clipguard-2';
+export const RULE_VERSION = 'clipguard-2.1';
 export const THRESHOLD = 70;
 export function words(t) { return (t || '').toLowerCase().replace(/[^a-z0-9' ]/g,' ').split(/\s+/).filter(Boolean); }
 function grams(t) { const w=words(t); const n=w.length<3?1:3; return new Set(w.slice(0,w.length-n+1).map((_,i)=>w.slice(i,i+n).join(' '))); }
@@ -9,8 +10,8 @@ export function visualSimilarity(a,b){if(!a?.length||!b?.length)return null;cons
 export function validFeature(f){return f&&f.version===VERSION&&typeof f.sha==='string'&&/^[a-f0-9]{64}$/.test(f.sha)&&typeof f.name==='string'&&f.name.length<=300&&Number.isFinite(f.duration)&&f.duration>0&&f.duration<=90&&Array.isArray(f.frames)&&f.frames.length>0&&f.frames.length<=90&&f.frames.every(x=>x&&/^[01]{63}$/.test(x.hash)&&Array.isArray(x.color)&&x.color.length===12&&x.color.every(v=>Number.isFinite(v)&&v>=0&&v<=1))&&typeof f.subtitles==='string'&&f.subtitles.length<30000&&['ok','none','review'].includes(f.subtitleStatus)&&validBgm(f.bgm)&&Array.isArray(f.errors)&&f.errors.length<20&&f.errors.every(e=>typeof e==='string'&&e.length<1000)&&typeof f.thumbnail==='string'&&(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(f.thumbnail))&&f.thumbnail.length<150000;}
 export function compare(feature,templates){
  const rows=templates.filter(t=>t.enabled!==false).map(t=>{const exact=feature.sha===t.sha,compatible=feature.version===VERSION&&t.version===VERSION;const visual=exact?100:visualSimilarity(feature.frames,t.frames),subtitle=exact?100:feature.subtitleStatus==='none'||t.subtitleStatus==='none'?0:textSimilarity(feature.subtitles,t.subtitles),bgm=compatible?bgmSimilarity(feature.bgm,t.bgm):null;const score=Math.max(visual??0,subtitle??0,bgm??0);const complete=compatible&&subtitle!==null&&bgm!==null&&['ok','none'].includes(feature.subtitleStatus)&&['ok','none'].includes(t.subtitleStatus)&&feature.bgm?.status!=='review'&&t.bgm?.status!=='review';return{id:t.id,name:t.name,visual,subtitle,bgm,score,complete,exact,legacy:!compatible};}).sort((a,b)=>b.score-a.score);
- const best=rows[0];const complete=rows.length>0&&rows.every(r=>r.complete);const status=!best?'review':best.score>=THRESHOLD?'fail':complete?'pass':'review';
- return{score:best?.score??null,status,best,comparisons:rows,threshold:THRESHOLD,algorithm:VERSION};
+ const best=rows[0];const complete=rows.length>0&&rows.every(r=>r.complete);const status=!best?'review':best.score>THRESHOLD?'fail':complete?'pass':'review';
+ return{score:best?.score??null,status,best,comparisons:rows,threshold:THRESHOLD,algorithm:RULE_VERSION};
 }
 let aiWorker,requests=new Map(),nextId=0;
 function ensureWorker(){if(!aiWorker){aiWorker=new Worker(new URL('./recognizer.js',import.meta.url),{type:'module'});aiWorker.onmessage=({data:d})=>{const r=requests.get(d.id);if(!r)return;if(d.progress){r.progress(d.progress);return;}clearTimeout(r.timer);requests.delete(d.id);d.error?r.reject(new Error(d.error)):r.resolve(d.result);};aiWorker.onerror=()=>{for(const r of requests.values()){clearTimeout(r.timer);r.reject(new Error('识别引擎启动失败，请检查模型网络连接后重试'));}requests.clear();aiWorker?.terminate();aiWorker=null;};}return aiWorker;}
