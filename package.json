@@ -1,0 +1,9 @@
+{
+  "name": "yingtie-group1-video-check",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test tests/engine.test.mjs"
+  }
+}
