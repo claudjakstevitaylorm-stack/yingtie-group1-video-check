@@ -1,0 +1,10 @@
+import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {build} from 'esbuild';
+const files=['index.html','style.css','app.js','engine.js','recognizer.js','shared-config.js'];
+const assets={};for(const file of files)assets['/'+file]=await readFile(file,'utf8');
+await mkdir('.sites-runtime',{recursive:true});
+await writeFile('.sites-runtime/assets.js','export default '+JSON.stringify(assets)+';\n');
+await mkdir('dist/server',{recursive:true});await mkdir('dist/.openai',{recursive:true});
+await build({entryPoints:['server/index.js'],bundle:true,format:'esm',platform:'browser',target:'es2022',outfile:'dist/server/index.js'});
+await copyFile('.openai/hosting.json','dist/.openai/hosting.json');
+console.log('Shared API and website bundled.');
