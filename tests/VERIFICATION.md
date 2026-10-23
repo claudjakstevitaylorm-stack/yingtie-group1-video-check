@@ -1,15 +1,13 @@
-# 验证记录
+# 规则 v2 验证记录
 
-日期：2026-10-23（北京时间）。
+Node.js 24执行 `node --test tests/engine.test.mjs tests/shared-api.test.mjs`，21项通过。构建及Worker资产校验通过。
 
-- 8 项 Node 逻辑测试通过：70% 边界、缺项、单维度高度重复、全部启用模板、同文件、文本归一化、模板输入校验、画面指纹确定性。
-- 本地 HTTP 预览返回 200；浏览器中确认工作台、规则页和移动宽度排版。
-- 浏览器实际初始化 Whisper tiny.en（q8/WASM）与 Tesseract 英文 OCR 成功。
-- 真实集成测试：将公开 JFK WAV 音频与英文字幕画面录制为 11.2366 秒视频，执行完整 extract。
-- 提取 12 帧；英文转写为 `And so, my fellow Americans ask not what your country can do for you, ask what you can do for your country.`
-- OCR 成功提取四行英文文字，与画面文案一致；speechStatus / subtitleStatus 均为 ok；errors 为空。
-- 与该视频自身的指纹对比：100%，fail。
+覆盖：口播内容/识别状态不影响结论、字幕与花字命中、BGM≥70失败与65通过、缺项不自动通过、无BGM/无文字声明、旧模板兼容边界、合成PCM音乐音量/裁剪对齐及不同频谱、共享读取、视频Range、所有者权限、文件校验与错误状态。详情以测试源码为准。
 
-测试音频来源：[Hugging Face Transformers.js 官方示例数据集](https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav)。`browser-qa.html` 可临时置于静态服务根目录，并把该音频以 `qa-jfk.wav` 放在根目录后重现。测试页面与音频不包含于部署的 dist/。
+此前v1的Whisper验证不适用于本规则；当前完全不加载ASR。未以真实业务音乐测量误判率，未提供混合音轨人声分离。网站前后端须同时更新。
 
-没有用户真实视频或模板，尚未验证实际误判率、100 条批量吞吐、手机兼容性和大陆各网络环境模型下载成功率。没有声称通过平台官方查重或避免限流。
+同一浏览器重新上传自己的模板可升级特征，保留原启停状态和旧报告；其他组员不能覆盖同一原片的既有模板。
+
+浏览器实际生成3.8秒无音轨测试视频：整帧OCR成功识别“Daily video quality check”和花字“SPECIAL OFFER”，无语音字段、errors为空，确认无BGM后正常完成；相同文件判重复。
+
+浏览器实际解码合成纯BGM WAV并提取指纹成功，相同音乐降低音量后的相似度为100%。
