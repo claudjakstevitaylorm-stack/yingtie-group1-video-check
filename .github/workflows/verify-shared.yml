@@ -1,0 +1,20 @@
+name: Verify shared video service
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check deployed database and storage
+        run: curl --fail --silent --show-error https://clipguard-team-video.claudjakstevitaylorm.chatgpt.site/api/health
+      - name: Download disposable public CC0 test video
+        run: curl --fail --silent --show-error --location https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4 --output /tmp/flower.mp4
+      - name: Verify upload sharing video playback and report then remove test data
+        run: node scripts/smoke-shared.mjs https://clipguard-team-video.claudjakstevitaylorm.chatgpt.site /tmp/flower.mp4
