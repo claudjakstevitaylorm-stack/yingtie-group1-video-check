@@ -15,6 +15,13 @@
       "when": 1792758869230,
       "tag": "0001_freezing_franklin_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793010009372,
+      "tag": "0002_secret_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }
