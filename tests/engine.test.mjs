@@ -81,3 +81,5 @@ test('local texture retains matching scenes under partial overlays without match
  assert.equal(localFrameMatch(a,{...edited,tiles:a.tiles.map((t,i)=>i<6?tile('1'.repeat(63)):t)}),false);
  assert.equal(validFeature(feature({frames:[{...a,tiles:[{}]}]})),false);
 });
+
+test('one click queues all outdated references while current and unselected pending references stay untouched',async()=>{const {referenceUpdateTargets}=await import('../reference-update.js');const templates=[{id:'old-a',referenceUpdateRequired:true,featureReady:false},{id:'current',referenceUpdateRequired:false,featureReady:true},{id:'old-b',referenceUpdateRequired:true,featureReady:false},{id:'pending',referenceUpdateRequired:false,featureReady:false}];assert.deepEqual(referenceUpdateTargets(templates).map(t=>t.id),['old-a','old-b']);assert.deepEqual(referenceUpdateTargets(templates,'pending').map(t=>t.id),['old-a','old-b','pending']);assert.deepEqual(referenceUpdateTargets(templates,'old-a').map(t=>t.id),['old-a','old-b']);});
