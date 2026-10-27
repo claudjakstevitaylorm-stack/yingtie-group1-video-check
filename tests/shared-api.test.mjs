@@ -31,12 +31,12 @@ test('R2 receives the readable half of a fixed-length stream in the Worker runti
  try{const env=createLocalEnv(),put=env.BUCKET.put.bind(env.BUCKET);env.BUCKET.put=async(key,value,options)=>{assert.ok(known.has(value),'R2 needs a stream with known length');return put(key,value,options);};await uploaded(env);}finally{if(original===undefined)delete globalThis.FixedLengthStream;else globalThis.FixedLengthStream=original;}
 });
 
-test('reuploading an owned template upgrades its feature version without erasing old reports',async()=>{
+test('each template upload keeps an independent identity even for identical original files',async()=>{
  const env=createLocalEnv(),first=await uploaded(env,'template');await first.c('/api/uploads/'+first.id+'/finalize','POST',{feature});
  await env.DB.prepare('UPDATE shared_templates SET feature=? WHERE id=?').bind(JSON.stringify({...feature,id:first.id,version:'clipguard-1',speech:'legacy words',speechStatus:'ok'}),first.id).run();
  const next=await uploaded(env,'template'),updated=await next.c('/api/uploads/'+next.id+'/finalize','POST',{feature});assert.equal(updated.status,200);
- const templates=(await(await next.c('/api/templates')).json()).templates;assert.equal(templates.length,1);assert.equal(templates[0].id,next.id);assert.equal(templates[0].version,VERSION);assert.equal(templates[0].speech,undefined);assert.equal((await first.c('/api/records/'+first.id)).status,200);
- const other=await uploaded(env,'template',B);assert.equal((await other.c('/api/uploads/'+other.id+'/finalize','POST',{feature})).status,409);
+ let templates=(await(await next.c('/api/templates')).json()).templates;assert.equal(templates.length,2);assert.equal(templates.find(t=>t.id===next.id).version,VERSION);assert.equal(templates.find(t=>t.id===first.id).version,'clipguard-1');
+ const other=await uploaded(env,'template',B);assert.equal((await other.c('/api/uploads/'+other.id+'/finalize','POST',{feature})).status,200);templates=(await(await other.c('/api/templates')).json()).templates;assert.equal(templates.length,3);assert.ok(templates.some(t=>t.id===first.id));
 });
 
 test('template categories match the supplied folder names and old rows remain uncategorized',async()=>{
@@ -59,7 +59,7 @@ test('selected template alone determines the result even when an unselected temp
  assert.equal(result.record.status,'pass');assert.equal(result.record.score,0);assert.equal(result.record.templateCount,1);assert.equal(result.record.best.id,selected.id);assert.equal(result.record.selectedTemplateId,selected.id);assert.equal(result.record.category,'Avanti');
  const rows=await(await client(env)('/api/records?category='+encodeURIComponent('Avanti'))).json();assert.equal(rows.total,1);assert.equal(rows.records[0].selectedTemplateName,'Avanti+组员甲');assert.equal((await(await client(env)('/api/records?category=LNER')).json()).total,0);
 });
-test('invalid, mismatched, disabled or missing selections never fall back to the whole library',async()=>{
+test('invalid new selections are rejected and started tasks keep their template snapshot',async()=>{
  const env=createLocalEnv(),template=await uploaded(env,'template',A,{category:'LNER'});await template.c('/api/uploads/'+template.id+'/finalize','POST',{feature});
  const c=client(env,B),registration={name:'upload.mp4',member:'乙',size:10,mime:'video/mp4',kind:'video'};
  assert.equal((await c('/api/uploads','POST',{...registration,category:'Avanti',templateId:template.id})).status,409);
@@ -68,7 +68,7 @@ test('invalid, mismatched, disabled or missing selections never fall back to the
  for(const mutation of [{enabled:false},{category:'GWR'}]){
   await template.c('/api/templates/'+template.id,'PATCH',{enabled:true,category:'LNER'});
   const pending=await uploaded(env,'video',B,{category:'LNER',templateId:template.id});await template.c('/api/templates/'+template.id,'PATCH',mutation);
-  const r=await(await pending.c('/api/uploads/'+pending.id+'/finalize','POST',{feature})).json();assert.equal(r.record.status,'review');assert.equal(r.record.comparisons.length,0);assert.match(r.record.errors.join(' '),/所选模板/);
+  const r=await(await pending.c('/api/uploads/'+pending.id+'/finalize','POST',{feature})).json();assert.equal(r.record.status,'fail');assert.equal(r.record.score,100);assert.equal(r.record.comparisons.length,1);assert.equal(r.record.templateSnapshotCaptured,true);
  }
 });
 
@@ -106,4 +106,29 @@ test('only the template uploader can prepare reference features and the file che
  assert.equal((await client(env,B)('/api/templates/'+upload.id+'/features','POST',{feature})).status,403);
  assert.equal((await upload.c('/api/templates/'+upload.id+'/features','POST',{feature:{...feature,sha:'f'.repeat(64)}})).status,400);
  await upload.c('/api/uploads/'+upload.id,'DELETE');assert.equal((await upload.c('/api/templates/'+upload.id+'/features','POST',{feature})).status,404);
+});
+
+test('two clients concurrently upload identical file names and templates without blocking or replacing each other',async()=>{
+ const env=createLocalEnv();const [a,b]=await Promise.all([uploaded(env,'template',A,{category:'Avanti',personalName:'甲'}),uploaded(env,'template',B,{category:'Avanti',personalName:'乙'})]);assert.notEqual(a.id,b.id);
+ const admissions=await Promise.all([a.c('/api/uploads/'+a.id+'/finalize','POST',{feature}),b.c('/api/uploads/'+b.id+'/finalize','POST',{feature})]);assert.deepEqual(admissions.map(r=>r.status),[200,200]);
+ const templates=(await(await client(env)('/api/templates')).json()).templates;assert.equal(templates.length,2);assert.ok(templates.some(t=>t.name==='Avanti+甲'));assert.ok(templates.some(t=>t.name==='Avanti+乙'));
+ const [va,vb]=await Promise.all([uploaded(env,'video',A,{category:'Avanti',templateId:a.id}),uploaded(env,'video',B,{category:'Avanti',templateId:b.id})]);assert.notEqual(va.id,vb.id);
+ await Promise.all([va.c('/api/uploads/'+va.id+'/finalize','POST',{error:'甲主动停止本次任务'}),vb.c('/api/uploads/'+vb.id+'/finalize','POST',{feature})]);
+ const result=await(await vb.c('/api/records/'+vb.id)).json();assert.equal(result.status,'fail');assert.equal(result.best.id,b.id);assert.equal(result.templateSnapshotCaptured,true);
+ assert.equal((await va.c('/api/uploads/'+vb.id,'DELETE')).status,403);await va.c('/api/uploads/'+va.id,'DELETE');assert.equal((await vb.c('/api/videos/'+vb.id)).status,200);assert.equal((await(await vb.c('/api/records/'+vb.id)).json()).status,'fail');
+});
+test('template edits and deletion cannot alter already-started results while new tasks get the new reference',async()=>{
+ const env=createLocalEnv(),ref=await uploaded(env,'template',A,{category:'LNER'}),reference={...feature,sha:'e'.repeat(64)};
+ await env.BUCKET.put('videos/'+ref.id,new Blob([bytes]).stream(),{customMetadata:{sha:reference.sha}});await ref.c('/api/uploads/'+ref.id+'/finalize','POST',{feature:reference});
+ const running=await uploaded(env,'video',B,{category:'LNER',templateId:ref.id});
+ const changed={...reference,frames:[{...reference.frames[0],hash:'1'.repeat(63)}],subtitles:'new unrelated english phrase from another reference',overlays:'completely different promotion'};
+ await ref.c('/api/templates/'+ref.id+'/features','POST',{feature:changed});await ref.c('/api/templates/'+ref.id,'PATCH',{personalName:'已改名字'});
+ const later=await uploaded(env,'video',B,{category:'LNER',templateId:ref.id});await ref.c('/api/uploads/'+ref.id,'DELETE');
+ const [oldResult,newResult]=await Promise.all([running.c('/api/uploads/'+running.id+'/finalize','POST',{feature}).then(r=>r.json()),later.c('/api/uploads/'+later.id+'/finalize','POST',{feature}).then(r=>r.json())]);
+ assert.equal(oldResult.record.status,'fail');assert.equal(oldResult.record.score,100);assert.equal(oldResult.record.best.name,'LNER+组员甲');assert.equal(newResult.record.status,'pass');assert.equal(newResult.record.score,0);assert.equal(newResult.record.best.name,'LNER+已改名字');assert.ok(oldResult.record.templateCapturedAt);assert.equal((await client(env)('/api/records/'+running.id)).status,200);
+});
+test('one browser reaching its upload quota does not consume another browser quota',async()=>{
+ const env=createLocalEnv();await uploaded(env,'video',A);const first=env.sqlite.prepare('SELECT * FROM shared_uploads LIMIT 1').get();
+ for(let i=0;i<199;i++)env.sqlite.prepare('INSERT INTO shared_uploads(id,member,name,kind,state,size,mime,created_at,updated_at,owner_hash,video_ready,category) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(crypto.randomUUID(),'甲','quota.mp4','video','complete',10,'video/mp4',first.created_at,first.updated_at,first.owner_hash,0,'未分类');
+ const request={name:'same.mp4',member:'甲',kind:'video',size:10,mime:'video/mp4'};assert.equal((await client(env,A)('/api/uploads','POST',request)).status,429);assert.equal((await client(env,B)('/api/uploads','POST',{...request,member:'乙'})).status,201);
 });
