@@ -44,7 +44,9 @@ export async function initialize(progress=()=>{}){return ai('init',{},progress);
 const cos=Array.from({length:8},(_,u)=>Array.from({length:32},(_,x)=>Math.cos((2*x+1)*u*Math.PI/64)));
 export function fingerprint(rgba){const gray=new Float32Array(1024),color=new Array(12).fill(0);for(let i=0;i<1024;i++){let j=i*4;gray[i]=.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2];for(let c=0;c<3;c++)color[c*4+Math.min(3,rgba[j+c]>>6)]++;}for(let c=0;c<12;c++)color[c]/=1024;const dct=[];for(let u=0;u<8;u++)for(let v=0;v<8;v++){let sum=0;for(let x=0;x<32;x++){let row=0;for(let y=0;y<32;y++)row+=gray[x*32+y]*cos[v][y];sum+=row*cos[u][x];}if(u||v)dct.push(sum);}const median=[...dct].sort((a,b)=>a-b)[31];return{hash:dct.map(v=>v>median?'1':'0').join(''),color};}
 function mediaEvent(el,event,action){return new Promise((resolve,reject)=>{const cleanup=()=>{clearTimeout(timer);el.removeEventListener(event,ok);el.removeEventListener('error',bad);};const ok=()=>{cleanup();resolve();};const bad=()=>{cleanup();reject(new Error('视频无法解码，请转为 H.264 / AAC 的 MP4 后重试'));};const timer=setTimeout(()=>{cleanup();reject(new Error('读取视频超时，请检查格式'));},20000);el.addEventListener(event,ok,{once:true});el.addEventListener('error',bad,{once:true});try{action();}catch(e){cleanup();reject(e);}});}
-export async function extract(file,progress=()=>{},options={}){
+let extractionTail=Promise.resolve();
+export function extract(file,progress=()=>{},options={}){const task=extractionTail.catch(()=>{}).then(()=>extractFile(file,progress,options));extractionTail=task.catch(()=>{});return task;}
+async function extractFile(file,progress=()=>{},options={}){
  if(file.size>100*1024*1024)throw new Error('单个视频不能超过 100 MB');
  const video=document.createElement('video');video.muted=true;video.playsInline=true;video.preload='auto';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none';document.body.append(video);const url=URL.createObjectURL(file);const canvas=document.createElement('canvas');canvas.width=32;canvas.height=32;const ctx=canvas.getContext('2d',{willReadFrequently:true});const snap=document.createElement('canvas'),sc=snap.getContext('2d');let duration;const frames=[],ocrFrames=[];let thumbnail='';
  try{await mediaEvent(video,'loadeddata',()=>{video.src=url;video.load();});duration=video.duration;if(!Number.isFinite(duration)||duration<=0||duration>90)throw new Error('支持 90 秒以内的视频，建议约 30 秒');const count=Math.max(1,Math.ceil(duration));snap.width=640;snap.height=Math.round(640*video.videoHeight/video.videoWidth);if(snap.height>1280){snap.height=1280;snap.width=Math.round(1280*video.videoWidth/video.videoHeight);}for(let i=0;i<count;i++){const time=Math.min(duration-.01,i+.1);if(Math.abs(video.currentTime-time)>.001)await mediaEvent(video,'seeked',()=>{video.currentTime=time;});ctx.drawImage(video,0,0,32,32);frames.push(fingerprint(ctx.getImageData(0,0,32,32).data));{sc.drawImage(video,0,0,snap.width,snap.height);ocrFrames.push(snap.toDataURL('image/jpeg',.85));}if(i===0){const thumb=document.createElement('canvas');thumb.width=160;thumb.height=Math.round(160*video.videoHeight/video.videoWidth);thumb.getContext('2d').drawImage(video,0,0,thumb.width,thumb.height);thumbnail=thumb.toDataURL('image/jpeg',.6);}progress('提取画面 '+(i+1)+' / '+count);}}finally{video.removeAttribute('src');video.load();video.remove();URL.revokeObjectURL(url);}
@@ -56,12 +58,12 @@ export async function extract(file,progress=()=>{},options={}){
   if(!noSubtitle){subtitles=result.subtitles||'';subtitleStatus=words(subtitles).length?'ok':'review';}
   if(!noOverlay){overlays=result.overlays||'';overlayStatus=words(overlays).length?'ok':'review';}
  }catch(e){errors.push('画面文字识别：'+e.message);}
- if(subtitleStatus==='review')errors.push('字幕未确认：未识别到可靠底部字幕，如确无字幕可勾选“确认无字幕”');
- if(overlayStatus==='review')errors.push('花字未确认：未识别到可靠花字，如确无花字可勾选“确认无花字”');
+ if(subtitleStatus==='review')errors.push(options.forTemplate?'暂未提取到可靠字幕参考':'字幕未确认：未识别到可靠底部字幕，如确无字幕可勾选“确认无字幕”');
+ if(overlayStatus==='review')errors.push(options.forTemplate?'暂未提取到可靠花字参考':'花字未确认：未识别到可靠花字，如确无花字可勾选“确认无花字”');
  let bgm={status:'review',source:'unconfirmed',frames:[]};
  if(options.bgmMode==='none')bgm={status:'none',source:'declared-none',frames:[]};
  else if(options.bgmFile)try{bgm=await extractBgm(options.bgmFile,duration,progress);}catch(e){errors.push('BGM：'+e.message);}
- if(bgm.status==='review'&&!errors.some(e=>e.startsWith('BGM：')))errors.push('BGM未确认：请提供与视频同起止的纯BGM片段，或确认没有BGM。口播音频不参与比对');
+ if(!options.forTemplate&&bgm.status==='review'&&!errors.some(e=>e.startsWith('BGM：')))errors.push('BGM未确认：请提供与视频同起止的纯BGM片段，或确认没有BGM。口播音频不参与比对');
  progress('生成文件指纹…');const sha=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),b=>b.toString(16).padStart(2,'0')).join('');
  return{version:VERSION,name:file.name.slice(0,300),duration,size:file.size,sha,frames,thumbnail,subtitles,subtitleStatus,overlays,overlayStatus,bgm,errors,createdAt:new Date().toISOString()};
 }
