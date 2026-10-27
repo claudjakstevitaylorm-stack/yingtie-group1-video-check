@@ -1,3 +1,4 @@
+import {reviewOpinion} from './report-score.js';
 import {REDLINES,REDLINE_VERSION,scanRedlines} from './redline-rules.js';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function redlineHints(record){return record?.redlineHints?.version===REDLINE_VERSION?record.redlineHints:scanRedlines(record);}
@@ -23,5 +24,5 @@ export function reviewOutcome(record){
  const red=redlineResult(record);
  if(record.status==='fail'||red.tone==='fail')return{label:'不通过',tone:'fail',opinion:[record.status==='fail'?'查重未通过':'',red.tone==='fail'?red.opinion:''].filter(Boolean).join('；')};
  if(record.status==='pass'&&red.tone==='pass')return{label:'通过',tone:'pass',opinion:''};
- return{label:'待复核',tone:'review',opinion:'识别结果未完整，请点击查看意见'};
+ return{label:'待复核',tone:'review',opinion:record.status==='review'?reviewOpinion(record):red.opinion};
 }

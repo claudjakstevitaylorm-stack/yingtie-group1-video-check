@@ -74,3 +74,5 @@ button.review-outcome{cursor:pointer;transition:filter .15s}button.review-outcom
 .redline-times{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}.redline-time{border:1px solid #f3b49d;background:#fff;color:#b7381f;padding:7px 11px;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer}.redline-time:hover{background:#ffeadf}.redline-time:focus-visible{outline:3px solid #e3a58d;outline-offset:2px}.redline-time-note{display:block;color:#6b7280;font-size:13px;margin:6px 0 12px}
 
 .report-dimension .dimension-reason{margin:12px 0 0;color:#606975;font-size:13px;line-height:1.7;white-space:pre-line;font-weight:400;overflow-wrap:anywhere}
+
+.review-opinion.pending-opinion{color:#876332;-webkit-line-clamp:3}

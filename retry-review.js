@@ -1,7 +1,7 @@
 // A retry is a separate upload/audit item. The source record is never modified.
 export function retryReviewItem(record,template,{member='',localItem=null,id=crypto.randomUUID()}={}){
  if(!record.videoUrl||!record.selectedTemplateId)throw new Error('原视频或对应模板信息缺失，暂时无法重新审核');
- if(!template||template.id!==record.selectedTemplateId||template.enabled===false||!template.featureReady)throw new Error('对应模板尚不可用，请先在模板库更新识别参考');
+ if(!template||template.id!==record.selectedTemplateId||template.enabled===false)throw new Error('对应模板已停用或不存在，请重新选择模板');
  const name=('重审 · '+record.name.replace(/^重审 · /,'')).slice(0,300);
  return{id,file:{name,size:record.size,type:record.mime},member:record.member||member,requestedBy:member,state:'等待读取原视频',done:false,bgmMode:localItem?.bgmFile?'file':record.bgm?.status==='none'?'none':'review',...(localItem?.bgmFile?{bgmFile:localItem.bgmFile}:{}),noSubtitle:record.subtitleStatus==='none'||!!localItem?.noSubtitle,noOverlay:record.overlayStatus==='none'||!!localItem?.noOverlay,category:template.category,templateId:template.id,templateName:template.name,retrySourceId:record.id,mediaTimeout:60000};
 }
