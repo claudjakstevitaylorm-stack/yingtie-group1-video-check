@@ -13,7 +13,7 @@ export function localFrameMatch(a,b){if(!a.tiles||!b.tiles)return false;const ac
 
 export function frameMatch(a,b){let d=0;for(let i=0;i<63;i++)if(a.hash[i]!==b.hash[i])d++;let color=0;for(let i=0;i<12;i++)color+=Math.abs(a.color[i]-b.color[i]);return d<=9&&color<.55;}
 export function visualSimilarity(a,b){if(!a?.length||!b?.length)return null;const coverage=(x,y)=>x.filter(f=>y.some(g=>frameMatch(f,g)||localFrameMatch(f,g))).length/x.length;return 100*Math.max(coverage(a,b),coverage(b,a));}
-export function hasEvidence(f){const e=f?.evidence,n=f?.frames?.length;if(e?.version!==1||e.sampleCount!==n||!Array.isArray(e.sampleTimes)||e.sampleTimes.length!==n)return false;let previous=-1;for(const time of e.sampleTimes){if(!Number.isFinite(time)||time<0||time>=f.duration||time<=previous)return false;previous=time;}for(const key of ['subtitleFrames','overlayFrames'])if(!Array.isArray(e[key])||new Set(e[key]).size!==e[key].length||!e[key].every(i=>Number.isInteger(i)&&i>=0&&i<n))return false;return true;}
+export function hasEvidence(f){const e=f?.evidence,n=f?.frames?.length;if(e?.version!==1||e.sampleCount!==n||!Array.isArray(e.sampleTimes)||e.sampleTimes.length!==n)return false;let previous=-1;for(const time of e.sampleTimes){if(!Number.isFinite(time)||time<0||time>=f.duration||time<=previous)return false;previous=time;}for(const key of ['subtitleFrames','overlayFrames'])if(!Array.isArray(e[key])||new Set(e[key]).size!==e[key].length||!e[key].every(i=>Number.isInteger(i)&&i>=0&&i<n))return false;if(e.textSamples!==undefined&&(!Array.isArray(e.textSamples)||e.textSamples.length>n||new Set(e.textSamples.map(x=>x?.frame)).size!==e.textSamples.length||!e.textSamples.every(x=>x&&Number.isInteger(x.frame)&&x.frame>=0&&x.frame<n&&['subtitles','overlays'].every(k=>typeof x[k]==='string'&&x[k].length<=500))))return false;return true;}
 function textReliable(f,overlay){if(!hasEvidence(f))return false;const list=f.evidence[overlay?'overlayFrames':'subtitleFrames'];return list.length>=Math.max(3,Math.ceil(f.frames.length*.4))&&reliableText(overlay?f.overlays:f.subtitles);}
 function musicReliable(f){const b=f.bgm;return validBgm(b)&&b.status==='ok'&&Math.abs(b.duration-f.duration)<=1&&b.frames.length>=Math.max(11,Math.ceil((b.duration*4-.256)*.8))&&b.frames.filter(frame=>frame.some(v=>v>0)).length>=Math.ceil(b.frames.length*.8);}
 function visualReliable(f){if(!hasEvidence(f)||f.frames.length<Math.min(12,Math.ceil(f.duration*2)))return false;const rich=f.frames.filter(frame=>frame.tiles?.filter(t=>t.detail>=12).length>=4);return rich.length>=Math.ceil(f.frames.length*.6);}
@@ -59,7 +59,7 @@ async function extractFile(file,progress=()=>{},options={}){
  const noSubtitle=options.noText||options.noSubtitle,noOverlay=options.noText||options.noOverlay;
  if(noSubtitle)subtitleStatus='none';if(noOverlay)overlayStatus='none';
  if(!noSubtitle||!noOverlay)try{
-  const result=await ai('ocr',{frames:ocrFrames,height:snap.height},progress);textEvidence={subtitleFrames:result.subtitleFrames||[],overlayFrames:result.overlayFrames||[]};
+  const result=await ai('ocr',{frames:ocrFrames,height:snap.height},progress);textEvidence={subtitleFrames:result.subtitleFrames||[],overlayFrames:result.overlayFrames||[],textSamples:result.textSamples||[]};
   if(!noSubtitle){subtitles=result.subtitles||'';subtitleStatus=reliableText(subtitles)?'ok':'review';}
   if(!noOverlay){overlays=result.overlays||'';overlayStatus=reliableText(overlays)?'ok':'review';}
  }catch(e){errors.push('画面文字识别：'+e.message);}

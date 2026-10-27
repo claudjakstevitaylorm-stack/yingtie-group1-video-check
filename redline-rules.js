@@ -1,4 +1,4 @@
-export const REDLINE_VERSION='image-redlines-20261027-4';
+export const REDLINE_VERSION='image-redlines-20261027-5';
 const operators='GWR|LNER|Avanti(?: West Coast)?|ScotRail|Thameslink|Southern|Northern|South Western Railway|Greater Anglia|Chiltern Railways|Elizabeth line';
 // These are review cues from the new screenshots, not automatic compliance verdicts.
 export const REDLINES=[
@@ -28,6 +28,19 @@ export const REDLINES=[
 ].map(rule=>({enabled:true,...rule}));
 export function scanRedlines(input={}){
  const channels=[['字幕OCR',input.subtitles],['花字OCR',input.overlays],['补充文案',input.supplementalText]],items=[];
- for(const rule of REDLINES.filter(r=>r.enabled&&r.patterns)){const matches=[];for(const [channel,value] of channels){if(typeof value!=='string')continue;const text=value.slice(0,30000);for(const original of rule.patterns){const pattern=new RegExp(original.source,original.flags);for(const found of text.matchAll(pattern)){const prefix=text.slice(Math.max(0,found.index-24),found.index);if(rule.skip?.(found[0],prefix))continue;const excerpt=text.slice(Math.max(0,found.index-35),Math.min(text.length,found.index+found[0].length+55)).trim();if(!matches.some(m=>m.channel===channel&&m.matched===found[0]))matches.push({channel,matched:found[0],excerpt});if(matches.length>=3)break;}if(matches.length>=3)break;}if(matches.length>=3)break;}if(matches.length)items.push({id:rule.id,title:rule.title,check:rule.check,suggestion:rule.suggestion,conflictingPolicy:!!rule.conflict,status:'notice-only',matches});}
+ for(const rule of REDLINES.filter(r=>r.enabled&&r.patterns)){const matches=[];for(const [channel,value] of channels){if(typeof value!=='string')continue;const text=value.slice(0,30000);for(const original of rule.patterns){const pattern=new RegExp(original.source,original.flags);for(const found of text.matchAll(pattern)){const prefix=text.slice(Math.max(0,found.index-24),found.index);if(rule.skip?.(found[0],prefix))continue;const excerpt=text.slice(Math.max(0,found.index-35),Math.min(text.length,found.index+found[0].length+55)).trim();if(!matches.some(m=>m.channel===channel&&m.matched===found[0]))matches.push({channel,matched:found[0],excerpt});if(matches.length>=3)break;}if(matches.length>=3)break;}if(matches.length>=3)break;}for(const match of matches)match.ranges=redlineTimeRanges(input,rule,match);if(matches.length)items.push({id:rule.id,title:rule.title,check:rule.check,suggestion:rule.suggestion,conflictingPolicy:!!rule.conflict,status:'notice-only',matches});}
  return{version:REDLINE_VERSION,mode:'text-alert-only',automaticDecision:false,items,hasTextEvidence:channels.some(([,text])=>typeof text==='string'&&text.trim().length>0),notAutomaticallyChecked:['原音口播','Logo和画面语义','人脸、人物授权及粉丝量','真实价格/评论来源','连续露出时长和面积'],notice:'仅基于已有OCR/提供文案的红线线索，须回看原片确认；不等于已完成内容审核，不改变查重结论。'};
+}
+
+// OCR positions are sampling windows, not exact word onset/offset times.
+export function redlineTimeRanges(input,rule,match){
+ const key={'字幕OCR':'subtitles','花字OCR':'overlays'}[match.channel],e=input.evidence,times=e?.sampleTimes,samples=e?.textSamples,duration=input.duration;
+ if(!key||!Array.isArray(times)||!Array.isArray(samples)||!Number.isFinite(duration)||duration<=0||!times.length||times.some((t,i)=>!Number.isFinite(t)||t<0||t>=duration||(i&&t<=times[i-1])))return [];
+ const normalize=s=>s.replace(/\s+/g,' ').trim(),indices=[];
+ for(const sample of samples){const i=sample?.frame,text=sample?.[key];if(!Number.isInteger(i)||i<0||i>=times.length||typeof text!=='string')continue;
+  const hit=rule.patterns.some(original=>Array.from(text.matchAll(new RegExp(original.source,original.flags))).some(found=>!rule.skip?.(found[0],text.slice(Math.max(0,found.index-24),found.index))&&normalize(found[0])===normalize(match.matched)));
+  if(hit)indices.push(i);
+ }
+ const windows=[];for(const i of [...new Set(indices)].sort((a,b)=>a-b)){const start=i===0?0:(times[i-1]+times[i])/2,end=i===times.length-1?duration:(times[i]+times[i+1])/2,last=windows.at(-1);if(last&&i===last.last+1){last.end=end;last.last=i;}else windows.push({start,end,last:i});}
+ return windows.map(({start,end})=>({start:Math.round(start*1000)/1000,end:Math.round(end*1000)/1000}));
 }
