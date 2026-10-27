@@ -31,3 +31,32 @@
 .report-status-summary .review-results{flex-direction:row;gap:20px;flex-wrap:wrap}
 
 .review-verdict-opinion{padding:16px 18px;margin:18px 0;border:1px solid var(--line);border-radius:8px;background:#f9fbf7}.review-verdict-opinion h3{margin:0 0 8px;font-size:14px}.review-verdict-opinion p{color:var(--ink);margin:0;font-size:13px;line-height:1.8}
+
+/* Review typography: neutral reading text, status colors only for outcomes and hits. */
+#detail.report-dialog{color:#25282d}
+.report-dialog .detail-toolbar>span,.report-dialog .report-preview>h3,.report-dialog .report-review>h3{color:#20242a;font-weight:700}
+.report-dialog .report-file-meta{background:#f8f9fb;border-color:#eaecf0}
+.report-dialog .report-file-meta strong{color:#20242a;font-size:14px}
+.report-dialog .report-file-meta p{color:#40464f;font-size:12px;line-height:1.8}
+.report-dialog .meta-label{color:#9298a2;margin-right:5px}
+.report-dialog .report-status-summary{background:#f8f9fb;border:1px solid #eaecf0}
+.report-dialog .review-results>div>span:first-child{color:#525965;font-weight:500}
+.report-dialog .badge.pass{background:#eaf8ef;color:#16834b}
+.report-dialog .badge.fail{background:#fff0ef;color:#d92d20}
+.report-dialog .badge.review{background:#fff6e5;color:#9c6400}
+.report-dialog .review-opinion{color:#7b818c;font-size:12px}
+.report-dialog .review-opinion.redline-opinion{color:#b42318}
+.report-dialog .review-verdict-opinion{background:#fff;border-color:#e4e7ec;padding:20px}
+.report-dialog .review-verdict-opinion h3{color:#25282d;font-weight:700;font-size:15px}
+.report-dialog .review-verdict-opinion p{color:#3f444c;font-size:14px;line-height:1.9}
+.report-dialog .redline-panel{background:#fff5ed;border:1px solid #ffbf9b;border-radius:10px;padding:20px;color:#343940}
+.report-dialog .redline-panel h3{color:#25282d;font-size:15px;font-weight:700;margin:0 0 18px}
+.report-dialog .redline-hits{padding-left:20px;margin:0}
+.report-dialog .redline-hits li{padding-bottom:18px;margin-bottom:18px}
+.report-dialog .redline-hits li::marker{color:#d34a2f}
+.report-dialog .redline-hits li+li{border-top-color:#efd8c9}
+.report-dialog .redline-hits li:last-child{margin-bottom:0;padding-bottom:0}
+.report-dialog .redline-hits li>strong{color:#25282d;font-size:14px;font-weight:650;line-height:1.8}
+.report-dialog .redline-hits p{color:#444950;font-size:13px;line-height:1.9;margin:10px 0}
+.report-dialog .redline-hits q{color:#b42318;font-weight:600}
+.report-dialog .redline-hits li>p:last-child{color:#444950;margin-bottom:0}
