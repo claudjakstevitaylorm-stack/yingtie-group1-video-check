@@ -1,6 +1,7 @@
 import {ALL_CATEGORIES,UNCATEGORIZED} from '../categories.js';
 import {composeTemplateName,templateNameParts} from '../template-name.js';
 import assets from '../.sites-runtime/assets.js';
+import {scanRedlines} from '../redline-rules.js';
 import {VERSION,RULE_VERSION,THRESHOLD,validFeature,compare,hasEvidence} from '../engine.js';
 const ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHA=/^[a-f0-9]{64}$/;
@@ -66,7 +67,7 @@ export async function api(request,env){
   const row=await uploadRow(env,finish[1]);await owned(request,row);if(row.state==='complete')return json({record:cleanReport(row,await owner(request))});const data=await body(request);if(row.kind==='template')return json(await storeTemplate(env,row,data.feature?featureData(data.feature):null,data.error?String(data.error).slice(0,500):''));if(!row.video_ready&&!data.error)fail('视频尚未上传完成',409);let report,feature;
   if(data.error){report={status:'review',score:null,errors:[String(data.error).slice(0,500)],comparisons:[],threshold:THRESHOLD,algorithm:RULE_VERSION};}
   else{feature=featureData(data.feature);const head=await env.BUCKET.head('videos/'+row.id);if(head?.customMetadata?.sha!==feature.sha)fail('识别特征与上传的视频不一致');feature.name=row.name;const templates=row.template_snapshot?[JSON.parse(row.template_snapshot)]:(await templateList(env)).filter(t=>t.id===row.template_id&&t.enabled&&t.featureReady&&t.category===row.category);report={...feature,...compare(feature,templates),templateCount:templates.length,comparisonScope:'selected-template',templateSnapshotCaptured:!!row.template_snapshot,templateCapturedAt:row.template_snapshot?JSON.parse(row.template_snapshot).capturedAt:null,selectedTemplateId:row.template_id,selectedTemplateName:row.template_name,category:row.category};if(!report.templateCount)report.errors=[...report.errors,row.template_id?'所选模板仍在准备、已停用、删除或移入其他分类，请重新选择后上传检测':'未选择对应模板，请先选择分类与模板再上传检测'];delete report.frames;if(report.bgm){report.bgm={...report.bgm};delete report.bgm.frames;}}
-  const now=new Date().toISOString();await env.DB.prepare("UPDATE shared_uploads SET state=?,status=?,score=?,duration=?,report=?,error=?,updated_at=? WHERE id=?").bind(row.video_ready?'complete':'failed',report.status,report.score??null,feature?.duration??null,JSON.stringify(report),report.errors?.join('；')||null,now,row.id).run();return json({record:cleanReport(await uploadRow(env,row.id),await owner(request))});
+  report.redlineHints=scanRedlines(feature||{});const now=new Date().toISOString();await env.DB.prepare("UPDATE shared_uploads SET state=?,status=?,score=?,duration=?,report=?,error=?,updated_at=? WHERE id=?").bind(row.video_ready?'complete':'failed',report.status,report.score??null,feature?.duration??null,JSON.stringify(report),report.errors?.join('；')||null,now,row.id).run();return json({record:cleanReport(await uploadRow(env,row.id),await owner(request))});
  }
  const prepare=/^\/api\/templates\/([^/]+)\/features$/.exec(path);if(prepare&&request.method==='POST'){
   const caller=await owner(request,true),row=await uploadRow(env,prepare[1]);if(row.kind!=='template')fail('仅模板可准备参考特征',400);
