@@ -14,3 +14,11 @@ export function reviewOpinion(r){
  const missing=['visual','subtitle','overlay'].filter(k=>r.best?.states?.[k]==='review').map(k=>({visual:'画面',subtitle:'字幕',overlay:'花字'}[k]));
  return missing.length?missing.join('、')+'识别不完整，暂时无法确定是否通过。请确认模板选择正确、文字清晰后重新审核。':'识别结果不完整，暂时无法确定是否通过，请重新审核。';
 }
+
+export function dimensionReason(report,key){
+ if(Number.isFinite(report.best?.[key])||report.best?.states?.[key]==='none')return '';
+ const reason=report.best?.reasons?.[key]||report.evidenceExplanation?.[key];
+ if(!reason)return report.state==='uploading'?'上传完成后进行比对。':report.state==='processing'?'正在识别，完成后显示分数。':'这份报告未保存该项的具体原因，需要重新审核。';
+ const lines=reason.split('\n').filter(line=>line&&!line.startsWith('处理：')&&!line.includes('这些数量条件已满足。')).map(line=>line.replace(/上传视频「[^」]*」/g,'上传视频').replace(/模板「[^」]*」/g,'模板').replace(/不作为通过依据/g,'暂不计分'));
+ return lines.join('\n');
+}
