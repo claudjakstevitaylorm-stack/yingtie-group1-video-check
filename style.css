@@ -66,3 +66,5 @@ button.review-outcome{cursor:pointer;transition:filter .15s}button.review-outcom
 .review-outcome.outcome-pass{background:#16834b;color:#fff;box-shadow:0 2px 5px #16834b20}
 .review-outcome.outcome-fail{background:#d92d20;color:#fff;box-shadow:0 2px 5px #d92d2020}
 .review-outcome.outcome-review{background:#667085;color:#fff}
+
+.review-results{flex-direction:row;align-items:center;flex-wrap:wrap;gap:14px}.review-rate{display:flex;align-items:baseline;gap:8px;color:#707784;font-size:12px}.review-rate strong{font-size:20px;line-height:1.3;font-weight:700;color:#25282d;letter-spacing:0}.report-status-summary .review-results{gap:20px}.report-status-summary .review-rate strong{font-size:24px}
