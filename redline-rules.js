@@ -1,4 +1,4 @@
-export const REDLINE_VERSION='image-redlines-20261027-2';
+export const REDLINE_VERSION='image-redlines-20261027-3';
 const operators='GWR|LNER|Avanti(?: West Coast)?|ScotRail|Thameslink|Southern|Northern|South Western Railway|Greater Anglia|Chiltern Railways|Elizabeth line';
 // These are review cues from the new screenshots, not automatic compliance verdicts.
 export const REDLINES=[
@@ -18,7 +18,7 @@ export const REDLINES=[
  {id:'RL-14',title:'虚假评价与虚假回复',check:'人工核对评价、回复和口碑来源，打码不等于来源真实。',suggestion:'不发布虚构评价或伪造用户回复。'},
  {id:'RL-15',title:'5000粉以上KOL/网红怼脸素材',check:'人工核实是否属于截图限定的5000粉以上KOL及怼脸素材；不能从脸或画质猜粉丝量。与授权/短时/侧脸豁免需核对。',suggestion:'核实人物及授权、替换素材或按适用规则处理。',conflict:true},
  {id:'RL-16',title:'路线绝对报价缺少from/起',check:'检查具体路线“只需£x”等绝对价格表述；提示回看票价支持和实际文案。',suggestion:'优先改为London to Liverpool from £x等“£x起”，金额必须真实。',conflict:true,patterns:[/\b[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}\s+to\s+[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}\s+(?:(?:only|just|for)\s*)?£\s*\d+(?:\.\d{1,2})?/g,/(?:伦敦|利物浦|爱丁堡|曼彻斯特).{0,12}(?:只需|只要)\s*[£￡]?\s*\d+/g]},
- {id:'RL-17',title:'英文语法、拼写及TrainPal名称',check:'人工核对英语语法、语序、用词、标点；TrainPal的大小写和拼写需回看原画面，OCR误读及App原生文字豁免不得当作确认违规。',suggestion:'若确认为后加文案错拼，改为准确的TrainPal。',conflict:true,patterns:[/\btrain\s*pal\b/gi,/\b(?:tranipal|trianpal|trainpall)\b/gi],skip:match=>match==='TrainPal'},
+ {id:'RL-17',title:'英文语法、拼写及TrainPal名称',check:'人工核对英语语法、语序、用词、标点；TrainPal及TRAINPAL均允许；其余大小写和拼写需回看原画面，OCR误读及App原生文字豁免不得当作确认违规。',suggestion:'若确认为后加文案错拼，改为准确的TrainPal或TRAINPAL。',conflict:true,patterns:[/\btrain\s*pal\b/gi,/\b(?:tranipal|trianpal|trainpall)\b/gi],skip:match=>match==='TrainPal'||match==='TRAINPAL'},
  {id:'RL-18',title:'工作人员不会告诉你的话术',check:'检查“乘务员不会告诉你”“staff won’t tell you”等暗示，不把普通staff单词本身当违规。',suggestion:'改为客观、可核验的公开购票信息，避免踩工作人员。',conflict:true,patterns:[/\b(?:staff|conductors?|train crew)\s+(?:won.?t|will not|do not|don.?t|never)\s+(?:ever\s+)?tell\s+you\b/gi,/(?:乘务员|工作人员|员工).{0,10}(?:不会|不肯|不愿).{0,5}告诉你/g]},
  {id:'RL-19',title:'90% off优惠券承诺',check:'检查90% off优惠券话术，按实际产品、活动和上限核实，不能自动把所有优惠均改成20%。',suggestion:'删除不符合实际活动的90% off承诺，使用有依据的20% off等口径。',patterns:[/\b90\s*%\s*(?:off|discount)\b/gi,/(?:优惠券|折扣券).{0,15}90\s*%/g]},
  {id:'RL-20',title:'英镑符号和币种',check:'人工核对£符号、票价币种及计价含义，不仅凭另一币种出现就认定错误。',suggestion:'使用与真实价格及活动一致的币种符号。'},
