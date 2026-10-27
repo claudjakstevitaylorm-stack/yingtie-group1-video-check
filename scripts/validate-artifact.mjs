@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-for(const file of ['app.js','engine.js','bgm.js','recognizer.js','shared-config.js','categories.js']){const check=spawnSync(process.execPath,['--check',file],{encoding:'utf8'});assert.equal(check.status,0,check.stderr);}
+for(const file of ['app.js','engine.js','bgm.js','recognizer.js','shared-config.js','categories.js','screen-text.js']){const check=spawnSync(process.execPath,['--check',file],{encoding:'utf8'});assert.equal(check.status,0,check.stderr);}
 const config=JSON.parse(await readFile('.openai/hosting.json','utf8'));
 assert.equal(config.d1,'DB');assert.equal(config.r2,'BUCKET');assert.equal(config.static,undefined);
 const source=await readFile('dist/server/index.js','utf8');
