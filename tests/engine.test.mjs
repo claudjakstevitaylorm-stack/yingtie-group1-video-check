@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compare,textSimilarity,visualSimilarity,fingerprint,validFeature,VERSION} from '../engine.js';
+import {compare,textSimilarity,visualSimilarity,fingerprint,validFeature,VERSION,localFrameMatch,reliableText} from '../engine.js';
 import {BGM_VERSION,musicFingerprint,bgmSimilarity,validBgm} from '../bgm.js';
 import {splitScreenText} from '../screen-text.js';
 const color=[1,0,0,0,1,0,0,0,1,0,0,0];
@@ -20,7 +20,7 @@ test('exactly 70 passes, all scores above 70 fail, and the unrounded value decid
  const refs=Array.from({length:10},(_,i)=>i<7?black:white),other=[black,{hash:'01'.repeat(31)+'0',color},{hash:'10'.repeat(31)+'1',color}];
  const result=compare(feature({frames:refs}),[template({frames:other})]);assert.equal(result.score,70);assert.equal(result.status,'pass');
  const above=compare(feature({frames:refs.map((x,i)=>i===7?black:x)}),[template({frames:other})]);assert.equal(above.score,80);assert.equal(above.status,'fail');
- const tokens=Array.from({length:3002},(_,i)=>'w'+i);const near=compare(feature({subtitles:tokens.join(' ')}),[template({subtitles:tokens.slice(0,2103).concat(Array.from({length:899},(_,i)=>'z'+i)).join(' ')})]);assert.equal(near.score.toFixed(1),'70.0');assert.ok(near.score>70);assert.equal(near.status,'fail');
+ const tokens=Array.from({length:3002},(_,i)=>'w'+i);const near=compare(feature({subtitles:tokens.join(' ')}),[template({subtitles:tokens.slice(0,2102).concat(Array.from({length:900},(_,i)=>'z'+i)).join(' ')})]);assert.equal(near.score.toFixed(1),'70.0');assert.ok(near.score>70);assert.equal(near.status,'fail');
 });
 test('BGM 70 is sufficient to pass even with every other score 100; 75 alone is not',()=>{
  const b=music(Array.from({length:20},(_,i)=>frame(i<14?i:31)));assert.equal(bgmSimilarity(track,b),70);const result=compare(feature(),[template({bgm:b})]);assert.equal(result.status,'pass');assert.deepEqual(result.qualifying,['bgm']);b.frames[14]=frame(14);assert.equal(compare(feature(),[template({bgm:b})]).status,'fail');
@@ -41,8 +41,8 @@ test('identical file remains 100 and fails even when recognition is incomplete',
 test('speech content and recognition status never affect a result',()=>{
  for(const speechStatus of ['ok','review',undefined]){const r=compare(feature({frames:[white],speech:'same spoken text',speechStatus}),[template({speech:'same spoken text'})]);assert.equal(r.status,'pass');assert.equal(r.best.speech,undefined);}
 });
-test('old combined text is unscored while reliable visual evidence can still pass',()=>{
- const r=compare(feature({frames:[white]}),[template({version:'clipguard-2'})]);assert.equal(r.status,'pass');assert.equal(r.best.subtitle,null);assert.equal(r.best.overlay,null);assert.equal(r.best.legacy,true);assert.equal(compare(feature({bgm:unknown}),[template({version:'clipguard-2',bgm:unknown})]).status,'review');
+test('old recognition references stay unscored until re-prepared',()=>{
+ const r=compare(feature({frames:[white]}),[template({version:'clipguard-2'})]);assert.equal(r.status,'review');assert.equal(r.best.visual,null);assert.equal(r.best.subtitle,null);assert.equal(r.best.overlay,null);assert.equal(r.best.legacy,true);assert.equal(compare(feature({bgm:unknown}),[template({version:'clipguard-2',bgm:unknown})]).status,'review');
 });
 test('no enabled or selected template never passes',()=>{assert.equal(compare(feature(),[]).status,'review');assert.equal(compare(feature(),[template({enabled:false})]).status,'review');});
 test('screen text is split by line location; uncertain text is never fabricated',()=>{
@@ -59,4 +59,25 @@ test('visual fingerprints are deterministic and discriminate colors',()=>{
 function melody(notes,seconds=8,gain=.7){return Float32Array.from({length:seconds*8000},(_,i)=>gain*Math.sin(2*Math.PI*notes[Math.floor(i/2000)%notes.length]*i/8000));}
 test('PCM music tolerates volume and trimming; different music stays low',()=>{
  const samples=melody([160,440,260,880,330,620,1100,200]),a=music(musicFingerprint(samples)),b=music(musicFingerprint(Float32Array.from(samples.subarray(16000),v=>v*.2))),c=music(musicFingerprint(melody([1700,2200,3000,1300])));assert.equal(validBgm(a),true);assert.ok(bgmSimilarity(a,b)>95);assert.ok(bgmSimilarity(a,c)<70);assert.equal(bgmSimilarity(a,none),0);assert.equal(bgmSimilarity(a,unknown),null);
+});
+
+test('ordered text comparison tolerates OCR typos and inserted placements without changing word order',()=>{
+ const original='take the scenic railway journey through beautiful english countryside';
+ assert.equal(textSimilarity(original,'take the scenic sponsored railway journey through beautifu1 english countryside'),100);
+ assert.equal(textSimilarity(original,'unrelated football match score tonight'),0);
+ assert.ok(textSimilarity(original,wordsForTestReverse(original))<70);
+});
+function wordsForTestReverse(t){return t.split(' ').reverse().join(' ');}
+test('low confidence screen fragments and insufficient text cannot create reliable low scores',()=>{
+ const line=(text,confidence)=>({text,confidence,bbox:{y0:300,y1:330}}),data={blocks:[{paragraphs:[{lines:[line('i',99),line('785',99),line('A 1',99),line('uncertain caption text',45),line('Daily railway journey today',90)]}]}]};
+ assert.equal(splitScreenText(data,360).subtitles,'Daily railway journey today');assert.equal(reliableText('i 3 a 785 AN 1'),false);assert.equal(reliableText('real english subtitle sentence'),true);assert.equal(reliableText('tiny caption'),false);
+});
+test('local texture retains matching scenes under partial overlays without matching blank borders or unrelated scenes',()=>{
+ const tile=(hash,detail=40)=>({hash,color,detail});const a={...black,tiles:Array.from({length:9},()=>tile('0'.repeat(63)))};
+ const edited={...white,tiles:a.tiles.map((t,i)=>i<3?tile('1'.repeat(63)):t)};
+ assert.equal(localFrameMatch(a,edited),true);assert.equal(visualSimilarity([a],[edited]),100);
+ const unrelated={...white,tiles:a.tiles.map(()=>tile('1'.repeat(63)))};assert.equal(localFrameMatch(a,unrelated),false);assert.equal(visualSimilarity([a],[unrelated]),0);
+ assert.equal(localFrameMatch({...a,tiles:a.tiles.map(()=>tile('0'.repeat(63),0))},edited),false);
+ assert.equal(localFrameMatch(a,{...edited,tiles:a.tiles.map((t,i)=>i<6?tile('1'.repeat(63)):t)}),false);
+ assert.equal(validFeature(feature({frames:[{...a,tiles:[{}]}]})),false);
 });
