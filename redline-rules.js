@@ -1,4 +1,4 @@
-export const REDLINE_VERSION='image-redlines-20261027-3';
+export const REDLINE_VERSION='image-redlines-20261027-4';
 const operators='GWR|LNER|Avanti(?: West Coast)?|ScotRail|Thameslink|Southern|Northern|South Western Railway|Greater Anglia|Chiltern Railways|Elizabeth line';
 // These are review cues from the new screenshots, not automatic compliance verdicts.
 export const REDLINES=[
@@ -8,7 +8,7 @@ export const REDLINES=[
  {id:'RL-04',title:'供应商负面引导',check:'检查是否直接贬低铁路供应商，而非中性描述服务。',suggestion:'改为客观线路、票种或服务说明。',patterns:[new RegExp('\\b(?:'+operators+')\\b[^.!?\\n]{0,40}\\b(?:terrible|awful|scam|rubbish)\\b','gi')]},
  {id:'RL-05',title:'虚假价格图及路线价格真实性',check:'人工核对价格原图、站内票价/购票页、路线与承诺对象；不凭模糊数字判断造假。',suggestion:'使用真实匹配票价证据，不要求伪造截图。',conflict:true},
  {id:'RL-06',title:'冷知识真实性',check:'核对脚本和承担事实说明的画面，不凭素材质感判断真假。',suggestion:'补充可核验资料或修改不准确事实。'},
- {id:'RL-07',title:'绝对化营销表述',check:'检查最便宜、最低价格、最佳、领先、最棒、无敌等用语及其上下文。',suggestion:'改为有证据支持的具体事实或非绝对化表述。',patterns:[/最便宜|最低价格|最佳|最棒|无敌|世界第一/g,/\b(?:the cheapest|lowest (?:price|fare)s?|the best|unbeatable|world.s (?:best|safest))\b/gi]},
+ {id:'RL-07',title:'绝对化营销表述',check:'检查最便宜、最低价格、最佳、领先、最棒、无敌等用语及其上下文；用户允许英文the best，不据此触发红线。',suggestion:'改为有证据支持的具体事实或非绝对化表述。',patterns:[/最便宜|最低价格|最佳|最棒|无敌|世界第一/g,/\b(?:the cheapest|lowest (?:price|fare)s?|unbeatable|world.s (?:best|safest))\b/gi]},
  {id:'RL-08',title:'虚构评论引导口碑',check:'人工核对评论来源，不能捏造“真的只花了£1”等证言。',suggestion:'使用真实且有来源的用户反馈。'},
  {id:'RL-09',title:'歧视与偏见',check:'人工核对种族、性别、地域、阶级等偏见或歧视表达。',suggestion:'删除有明确歧视导向的表达，勿凭单词推断语义。'},
  {id:'RL-10',title:'名人肖像、版权和名人Meme',check:'人工核对人物/素材来源、授权与实际用途，尤其名人Meme；不凭影视质感断言侵权。',suggestion:'使用自有、授权或符合现行豁免的素材。',conflict:true},
