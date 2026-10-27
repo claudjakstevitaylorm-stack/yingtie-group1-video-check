@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {REDLINES,scanRedlines} from '../redline-rules.js';
-import {redlinePanel,redlineHints,redlineChecklist,redlineBadge,redlineResult} from '../redline-ui.js';
+import {redlinePanel,redlineHints,redlineChecklist,redlineBadge,redlineResult,reviewOutcome} from '../redline-ui.js';
 import worker from '../server/index.js';
 import {createLocalEnv} from '../scripts/local-env.mjs';
 import {feature} from './evidence-fixture.mjs';
@@ -25,3 +25,5 @@ test('server persists redline cues separately and does not trust supplied alert 
 test('uppercase TRAINPAL is allowed in both OCR channels and obsolete hints are recomputed',()=>{for(const channel of ['subtitles','overlays']){assert.equal(scanRedlines({[channel]:'Download TRAINPAL today'}).items.length,0);assert.ok(scanRedlines({[channel]:'Download TRAINPALL today'}).items.some(r=>r.id==='RL-17'));}const old={overlays:'TRAINPAL',status:'pass',redlineHints:{version:'image-redlines-20261027-2',items:[{id:'RL-17'}]}};assert.equal(redlinePanel(old),'');assert.equal(old.redlineHints.items.length,1);});
 
 test('list redline results remain separate from duplicate verdicts and never pass absent text',()=>{const hit={status:'pass',state:'complete',overlays:'Platform-subsidised'};assert.equal(redlineResult(hit).label,'不通过');assert.equal(hit.status,'pass');assert.equal(redlineResult({state:'complete',subtitles:'Download TRAINPAL today'}).label,'通过');assert.equal(redlineResult({state:'complete'}).label,'待确认');assert.equal(redlineResult({state:'processing',overlays:'Platform-subsidised'}).label,'待检测');assert.match(redlineResult(hit).opinion,/Retailer-subsidised/);});
+
+test('single outcome is green only when both checks pass and red when either fails',()=>{const pass={state:'complete',status:'pass',subtitles:'Download TRAINPAL today'};assert.equal(reviewOutcome(pass).label,'通过');assert.equal(reviewOutcome(pass).tone,'pass');assert.equal(reviewOutcome({...pass,overlays:'Platform-subsidised'}).tone,'fail');assert.equal(reviewOutcome({...pass,status:'fail'}).tone,'fail');assert.equal(reviewOutcome({...pass,subtitles:''}).label,'待复核');assert.equal(reviewOutcome({...pass,state:'uploading'}).label,'上传中');assert.equal(reviewOutcome({...pass,state:'processing'}).label,'审核中');assert.equal(pass.status,'pass');});

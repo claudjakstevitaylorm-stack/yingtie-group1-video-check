@@ -60,3 +60,9 @@
 .report-dialog .redline-hits p{color:#444950;font-size:13px;line-height:1.9;margin:10px 0}
 .report-dialog .redline-hits q{color:#b42318;font-weight:600}
 .report-dialog .redline-hits li>p:last-child{color:#444950;margin-bottom:0}
+
+.review-outcome{display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;min-width:104px;min-height:42px;padding:9px 22px;border:0;border-radius:8px;font-size:15px;line-height:1.5;font-weight:700;letter-spacing:1px;color:#fff;white-space:nowrap}
+button.review-outcome{cursor:pointer;transition:filter .15s}button.review-outcome:hover{filter:brightness(.92)}
+.review-outcome.outcome-pass{background:#16834b;color:#fff;box-shadow:0 2px 5px #16834b20}
+.review-outcome.outcome-fail{background:#d92d20;color:#fff;box-shadow:0 2px 5px #d92d2020}
+.review-outcome.outcome-review{background:#667085;color:#fff}

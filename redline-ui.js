@@ -13,3 +13,13 @@ export function redlineResult(record){
  if(!hints.hasTextEvidence)return{label:'待确认',tone:'review',opinion:'尚无字幕或花字识别结果，无法判断文字红线'};
  return{label:'通过',tone:'pass',opinion:'未检出文字红线'};
 }
+
+export function reviewOutcome(record){
+ if(record.state==='uploading')return{label:'上传中',tone:'review',opinion:''};
+ if(record.state==='processing')return{label:'审核中',tone:'review',opinion:''};
+ if(record.state==='failed')return{label:'上传失败',tone:'fail',opinion:'视频未处理成功，请重新提交'};
+ const red=redlineResult(record);
+ if(record.status==='fail'||red.tone==='fail')return{label:'不通过',tone:'fail',opinion:[record.status==='fail'?'查重未通过':'',red.tone==='fail'?red.opinion:''].filter(Boolean).join('；')};
+ if(record.status==='pass'&&red.tone==='pass')return{label:'通过',tone:'pass',opinion:''};
+ return{label:'待复核',tone:'review',opinion:'识别结果未完整，请点击查看意见'};
+}
