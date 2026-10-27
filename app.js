@@ -187,4 +187,4 @@ $('#member-form').addEventListener('submit',e=>{
 $('#member-dialog').addEventListener('cancel',e=>{if(!member)e.preventDefault();});
 $('#cancel-member').addEventListener('click',()=>$('#member-dialog').close());
 
-$('#close-detail').onclick=()=>$('#detail').close();$('#help').onclick=()=>{location.hash='guide';};window.addEventListener('hashchange',()=>{render();window.scrollTo(0,0);});window.addEventListener('beforeunload',e=>{if(busy||pendingPreparations||referenceBatchRunning){e.preventDefault();e.returnValue='';}});init();
+$('#close-detail').onclick=()=>$('#detail').close();$('#detail').addEventListener('close',()=>{$('#detail').querySelectorAll('video,audio').forEach(media=>media.pause());});$('#help').onclick=()=>{location.hash='guide';};window.addEventListener('hashchange',()=>{render();window.scrollTo(0,0);});window.addEventListener('beforeunload',e=>{if(busy||pendingPreparations||referenceBatchRunning){e.preventDefault();e.returnValue='';}});init();
