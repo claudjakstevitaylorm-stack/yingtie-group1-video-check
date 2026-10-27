@@ -51,7 +51,7 @@ test('screen text is split by line location; uncertain text is never fabricated'
 });
 test('English text normalizes punctuation and detects containment',()=>{assert.equal(textSimilarity('Hello, this is a sentence!','hello this is a sentence'),100);assert.equal(textSimilarity('one two three four five','intro one two three four five final'),100);assert.equal(textSimilarity('','text'),null);assert.equal(textSimilarity('different words','unrelated phrases'),0);});
 test('new features validate both independent text fields and reject bad data',()=>{
- assert.equal(validFeature(feature()),true);for(const bad of [{version:'clipguard-2'},{overlays:undefined},{overlayStatus:'invalid'},{thumbnail:'javascript:alert(1)'},{duration:200},{frames:[]},{bgm:{...none,status:'ok'}}])assert.equal(validFeature(feature(bad)),false);
+ assert.equal(validFeature(feature()),true);assert.equal(validFeature(feature({duration:600})),true);for(const bad of [{version:'clipguard-2'},{overlays:undefined},{overlayStatus:'invalid'},{thumbnail:'javascript:alert(1)'},{duration:0},{frames:[]},{bgm:{...none,status:'ok'}}])assert.equal(validFeature(feature(bad)),false);
 });
 test('visual fingerprints are deterministic and discriminate colors',()=>{
  const pixels=new Uint8ClampedArray(4096);for(let i=0;i<1024;i++){pixels[i*4]=255;pixels[i*4+3]=255;}const red=fingerprint(pixels);assert.deepEqual(fingerprint(pixels),red);for(let i=0;i<1024;i++){pixels[i*4]=0;pixels[i*4+2]=255;}assert.equal(visualSimilarity([red],[fingerprint(pixels)]),0);
