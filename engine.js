@@ -73,8 +73,9 @@ async function extractFile(file,progress=()=>{},options={}){
 
 // Explain available measurements without changing scores or historical verdicts.
 export function explainEvidence(video,template,row){
+ template=template||{explanationUnavailable:true};
  const result={},labels={subtitle:'字幕',overlay:'花字'};
- const side=(f,label,key)=>{const tokens=words(f[key==='subtitle'?'subtitles':'overlays']),valid=tokens.filter(t=>/^[a-z']{2,}$/.test(t)),unique=new Set(valid).size,e=f.evidence,n=e?.sampleCount,seen=e?.[key==='subtitle'?'subtitleFrames':'overlayFrames']?.length,ratio=tokens.length?valid.length/tokens.length:0;const gaps=[];
+ const side=(f,label,key)=>{if(f.explanationUnavailable)return '模板：这份旧报告没有返回检测时的模板明细，暂时无法判断模板哪项未达标；不能当成模板没有文字。';const tokens=words(f[key==='subtitle'?'subtitles':'overlays']),valid=tokens.filter(t=>/^[a-z']{2,}$/.test(t)),unique=new Set(valid).size,e=f.evidence,n=e?.sampleCount,seen=e?.[key==='subtitle'?'subtitleFrames':'overlayFrames']?.length,ratio=tokens.length?valid.length/tokens.length:0;const gaps=[];
  if(tokens.length<12)gaps.push('词数少于12');if(unique<8)gaps.push('不同有效词少于8');if(ratio<.85)gaps.push('有效英文词比例低于85%');
  if(!Number.isInteger(n)||!Number.isInteger(seen))gaps.push('未保存文字出现在哪些抽样画面的记录');else if(seen<Math.max(3,Math.ceil(n*.4)))gaps.push('文字仅出现在'+seen+'/'+n+'张抽样画面中，至少需'+Math.max(3,Math.ceil(n*.4))+'张');
  const status=f[key==='subtitle'?'subtitleStatus':'overlayStatus'];if(status==='none')gaps.push('被标记为没有'+labels[key]);else if(status!=='ok'&&!gaps.length)gaps.push('识别状态未确认');
@@ -84,8 +85,8 @@ export function explainEvidence(video,template,row){
  const sample=f=>f.frames?.length??f.evidence?.sampleCount;
  const count=f=>Number.isInteger(sample(f))?sample(f)+'张':'未保存';
  if(row.rawVisual===0)result.visual='已比较上传视频的'+count(video)+'抽样画面与模板的'+count(template)+'抽样画面，没有找到符合当前算法条件的匹配画面。可能是内容不同，也可能是裁剪、遮挡、缩放等使算法未匹配到，不能直接当成0%重复，不作为通过依据。\n处理：先确认选对了模板；若肉眼看起来相同，应改进画面识别，反复点审核未必能解决。';
- else{const describe=(f,label)=>{const n=sample(f),required=Math.min(12,Math.ceil(f.duration*2));const rich=f.frames?.filter(x=>x.tiles?.filter(t=>t.detail>=12).length>=4).length;return label+'：抽样'+count(f)+'（至少需'+required+'张）'+(Number.isInteger(rich)?'，其中'+rich+'张有足够画面细节（至少需'+Math.ceil(n*.6)+'张）':'，旧报告未保存逐张画面细节')+'。';};result.visual=describe(video,'上传视频')+'\n'+describe(template,'模板')+'\n处理：缺模板数据就更新模板识别参考；缺视频数据就重新审核。';}}
+ else{const describe=(f,label)=>{if(f.explanationUnavailable)return '模板：这份报告未返回检测时的画面抽样明细。';const n=sample(f),required=Math.min(12,Math.ceil(f.duration*2));const rich=f.frames?.filter(x=>x.tiles?.filter(t=>t.detail>=12).length>=4).length;return label+'：抽样'+count(f)+'（至少需'+required+'张）'+(Number.isInteger(rich)?'，其中'+rich+'张有足够画面细节（至少需'+Math.ceil(n*.6)+'张）':'，旧报告未保存逐张画面细节')+'。';};result.visual=describe(video,'上传视频')+'\n'+describe(template,'模板')+'\n处理：缺模板数据就更新模板识别参考；缺视频数据就重新审核。';}}
  if(!Number.isFinite(row.bgm)&&row.states?.bgm==='none')result.bgm='上传视频和模板均标记为无BGM，本项不参与比较，不是识别失败。';
- else if(!Number.isFinite(row.bgm)){const describe=(f,label)=>label+'：'+(f.bgm?.status==='none'?'标记为无BGM':f.bgm?.status!=='ok'?'未提供或未成功提取纯BGM':musicReliable(f)?'纯BGM数据完整':!Array.isArray(f.bgm?.frames)?'旧报告未保留音乐指纹明细':Math.abs(f.bgm.duration-f.duration)>1?'BGM长'+f.bgm.duration.toFixed(1)+'秒，视频长'+f.duration.toFixed(1)+'秒，时长不对应':'纯BGM指纹数量或有效声音覆盖不足');result.bgm=describe(video,'上传视频')+'；'+describe(template,'模板')+'。双方没有可用的音乐比对数据，本项不计分。处理：确实要比BGM时提供与视频同起止的纯BGM；口播不参与，也不会因为BGM缺失单独判不通过。';}
+ else if(!Number.isFinite(row.bgm)){const describe=(f,label)=>label+'：'+(f.explanationUnavailable?'这份报告未返回检测时的BGM明细':f.bgm?.status==='none'?'标记为无BGM':f.bgm?.status!=='ok'?'未提供或未成功提取纯BGM':musicReliable(f)?'纯BGM数据完整':!Array.isArray(f.bgm?.frames)?'旧报告未保留音乐指纹明细':Math.abs(f.bgm.duration-f.duration)>1?'BGM长'+f.bgm.duration.toFixed(1)+'秒，视频长'+f.duration.toFixed(1)+'秒，时长不对应':'纯BGM指纹数量或有效声音覆盖不足');result.bgm=describe(video,'上传视频')+'；'+describe(template,'模板')+'。双方没有可用的音乐比对数据，本项不计分。处理：确实要比BGM时提供与视频同起止的纯BGM；口播不参与，也不会因为BGM缺失单独判不通过。';}
  return result;
 }
