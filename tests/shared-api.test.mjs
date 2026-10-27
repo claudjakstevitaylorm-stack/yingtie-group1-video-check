@@ -57,7 +57,7 @@ test('selected template alone determines the result even when an unselected temp
  const video=await uploaded(env,'video',B,{category:'Avanti',templateId:selected.id});
  const result=await(await video.c('/api/uploads/'+video.id+'/finalize','POST',{feature,templateId:ignored.id})).json();
  assert.equal(result.record.status,'pass');assert.equal(result.record.score,0);assert.equal(result.record.templateCount,1);assert.equal(result.record.best.id,selected.id);assert.equal(result.record.selectedTemplateId,selected.id);assert.equal(result.record.category,'Avanti');
- const rows=await(await client(env)('/api/records?category='+encodeURIComponent('Avanti'))).json();assert.equal(rows.total,1);assert.equal(rows.records[0].selectedTemplateName,'sample+组员甲');assert.equal((await(await client(env)('/api/records?category=LNER')).json()).total,0);
+ const rows=await(await client(env)('/api/records?category='+encodeURIComponent('Avanti'))).json();assert.equal(rows.total,1);assert.equal(rows.records[0].selectedTemplateName,'Avanti+组员甲');assert.equal((await(await client(env)('/api/records?category=LNER')).json()).total,0);
 });
 test('invalid, mismatched, disabled or missing selections never fall back to the whole library',async()=>{
  const env=createLocalEnv(),template=await uploaded(env,'template',A,{category:'LNER'});await template.c('/api/uploads/'+template.id+'/finalize','POST',{feature});
@@ -82,19 +82,24 @@ test('server applies the any-dimension rule with separate subtitle and decorativ
 
 test('templates enter the library without feature extraction, review status or a content decision',async()=>{
  const env=createLocalEnv(),upload=await uploaded(env,'template',A,{hitName:'伊丽莎白爆款',category:'伊丽莎白'});
- const response=await upload.c('/api/uploads/'+upload.id+'/finalize','POST',{templateOnly:true});assert.equal(response.status,200);const accepted=await response.json();assert.equal(accepted.record.status,null);assert.equal(accepted.record.reviewRequired,false);assert.equal(accepted.record.name,'伊丽莎白爆款+组员甲');assert.equal(accepted.record.state,'complete');
+ const response=await upload.c('/api/uploads/'+upload.id+'/finalize','POST',{templateOnly:true});assert.equal(response.status,200);const accepted=await response.json();assert.equal(accepted.record.status,null);assert.equal(accepted.record.reviewRequired,false);assert.equal(accepted.record.name,'伊丽莎白+组员甲');assert.equal(accepted.record.state,'complete');
  let templates=(await(await upload.c('/api/templates')).json()).templates;assert.equal(templates.length,1);assert.equal(templates[0].featureReady,false);assert.equal(templates[0].preparationState,'pending');assert.equal(templates[0].reviewRequired,false);
  const cannotUse=await upload.c('/api/uploads','POST',{name:'check.mp4',member:'甲',kind:'video',mime:'video/mp4',size:10,category:'伊丽莎白',templateId:upload.id});assert.equal(cannotUse.status,409);
  await upload.c('/api/templates/'+upload.id+'/features','POST',{error:'OCR模型暂时不可用'});templates=(await(await upload.c('/api/templates')).json()).templates;assert.equal(templates.length,1);assert.equal(templates[0].preparationState,'error');assert.equal((await(await upload.c('/api/records/'+upload.id)).json()).status,null);
- const prepare=await upload.c('/api/templates/'+upload.id+'/features','POST',{feature:{...feature,subtitleStatus:'review',overlayStatus:'review',bgm:{status:'review',source:'unconfirmed',frames:[]},errors:['文字尚无可靠参考']}});assert.equal(prepare.status,200);templates=(await(await upload.c('/api/templates')).json()).templates;assert.equal(templates[0].featureReady,true);assert.equal(templates[0].name,'伊丽莎白爆款+组员甲');assert.equal((await(await prepare.json()).record).status,null);await env.DB.prepare('UPDATE shared_uploads SET report=?,status=? WHERE id=?').bind(JSON.stringify({status:'review',score:null}),'review',upload.id).run();assert.equal((await(await upload.c('/api/records/'+upload.id)).json()).status,null);
+ const prepare=await upload.c('/api/templates/'+upload.id+'/features','POST',{feature:{...feature,subtitleStatus:'review',overlayStatus:'review',bgm:{status:'review',source:'unconfirmed',frames:[]},errors:['文字尚无可靠参考']}});assert.equal(prepare.status,200);templates=(await(await upload.c('/api/templates')).json()).templates;assert.equal(templates[0].featureReady,true);assert.equal(templates[0].name,'伊丽莎白+组员甲');assert.equal((await(await prepare.json()).record).status,null);await env.DB.prepare('UPDATE shared_uploads SET report=?,status=? WHERE id=?').bind(JSON.stringify({status:'review',score:null}),'review',upload.id).run();assert.equal((await(await upload.c('/api/records/'+upload.id)).json()).status,null);
 });
-test('template names require a hit name plus the uploader name and can be renamed by the original browser',async()=>{
- const env=createLocalEnv(),upload=await uploaded(env,'template',A,{hitName:'无人检票爆款'});await upload.c('/api/uploads/'+upload.id+'/finalize','POST',{feature});
- const other=client(env,B);assert.equal((await other('/api/templates/'+upload.id,'PATCH',{hitName:'不得覆盖'})).status,403);
- assert.equal((await upload.c('/api/templates/'+upload.id,'PATCH',{hitName:'新的爆款名字'})).status,200);
- const t=(await(await other('/api/templates')).json()).templates[0];assert.equal(t.name,'新的爆款名字+组员甲');assert.equal((await(await upload.c('/api/records/'+upload.id)).json()).name,t.name);
- for(const hitName of ['', '爆款+额外名字', 'x'.repeat(121), 'bad\nname'])assert.equal((await upload.c('/api/templates/'+upload.id,'PATCH',{hitName})).status,400);
- const missing=await upload.c('/api/uploads','POST',{name:'original.mp4',member:'甲',kind:'template',size:10,mime:'video/mp4'});assert.equal(missing.status,400);const pending=await uploaded(env,'template',A,{hitName:'待准备的新模板'});await pending.c('/api/uploads/'+pending.id+'/finalize','POST',{templateOnly:true});await pending.c('/api/templates/'+pending.id,'PATCH',{hitName:'准备期间已改名'});await pending.c('/api/templates/'+pending.id+'/features','POST',{feature});assert.equal((await(await pending.c('/api/templates')).json()).templates[0].name,'准备期间已改名+组员甲');
+test('hit names are fixed, personal names are editable, and uploader identity is preserved',async()=>{
+ const env=createLocalEnv(),upload=await uploaded(env,'template',A,{category:'伊丽莎白',personalName:'张三',hitName:'不应采用的自由名字'});await upload.c('/api/uploads/'+upload.id+'/finalize','POST',{feature});
+ let t=(await(await upload.c('/api/templates')).json()).templates[0];assert.equal(t.name,'伊丽莎白+张三');assert.equal(t.hitName,'伊丽莎白');assert.equal(t.personalName,'张三');assert.equal(t.member,'组员甲');
+ const oldSelection=await uploaded(env,'video',B,{category:'伊丽莎白',templateId:upload.id});
+ const other=client(env,B);assert.equal((await other('/api/templates/'+upload.id,'PATCH',{personalName:'不得覆盖'})).status,403);
+ assert.equal((await upload.c('/api/templates/'+upload.id,'PATCH',{personalName:'李四'})).status,200);
+ t=(await(await other('/api/templates')).json()).templates[0];assert.equal(t.name,'伊丽莎白+李四');assert.equal(t.hitName,'伊丽莎白');assert.equal(t.personalName,'李四');assert.equal(t.member,'组员甲');
+ const historical=await(await oldSelection.c('/api/uploads/'+oldSelection.id+'/finalize','POST',{feature})).json();assert.equal(historical.record.selectedTemplateName,'伊丽莎白+张三');
+ assert.equal((await upload.c('/api/templates/'+upload.id,'PATCH',{hitName:'更改爆款名'})).status,400);
+ for(const personalName of ['', '名字+其他', 'x'.repeat(31), 'bad\nname'])assert.equal((await upload.c('/api/templates/'+upload.id,'PATCH',{personalName})).status,400);
+ const registration=await upload.c('/api/uploads','POST',{name:'original.mp4',member:'甲',kind:'template',size:10,mime:'video/mp4',category:'LNER'});assert.equal(registration.status,201);const row=await registration.json();assert.equal((await(await upload.c('/api/records/'+row.id)).json()).name,'LNER+甲');
+ const pending=await uploaded(env,'template',A,{category:'Avanti',personalName:'王五'});await pending.c('/api/uploads/'+pending.id+'/finalize','POST',{templateOnly:true});await pending.c('/api/templates/'+pending.id,'PATCH',{personalName:'赵六'});await pending.c('/api/templates/'+pending.id+'/features','POST',{feature});assert.equal((await(await pending.c('/api/templates')).json()).templates[0].name,'Avanti+赵六');
 });
 test('only the template uploader can prepare reference features and the file checksum is enforced',async()=>{
  const env=createLocalEnv(),upload=await uploaded(env,'template');await upload.c('/api/uploads/'+upload.id+'/finalize','POST',{templateOnly:true});
