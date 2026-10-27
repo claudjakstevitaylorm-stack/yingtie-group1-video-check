@@ -1,85 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compare,textSimilarity,visualSimilarity,fingerprint,validFeature,VERSION,localFrameMatch,reliableText} from '../engine.js';
+import {compare,textSimilarity,visualSimilarity,fingerprint,validFeature,hasEvidence,reliableText,localFrameMatch} from '../engine.js';
 import {BGM_VERSION,musicFingerprint,bgmSimilarity,validBgm} from '../bgm.js';
 import {splitScreenText} from '../screen-text.js';
-const color=[1,0,0,0,1,0,0,0,1,0,0,0];
-const black={hash:'0'.repeat(63),color},white={hash:'1'.repeat(63),color};
-const none={status:'none',source:'declared-none',frames:[]},unknown={status:'review',source:'unconfirmed',frames:[]};
-const frame=i=>Array.from({length:32},(_,k)=>k===i?255:0);
-const music=frames=>({status:'ok',source:'clean-audio',version:BGM_VERSION,name:'bgm.wav',duration:30,sha:'c'.repeat(64),frames});
-const track=music(Array.from({length:20},(_,i)=>frame(i)));
-const feature=(overrides={})=>({id:'a',name:'video.mp4',sha:'a'.repeat(64),version:VERSION,frames:[black],subtitles:'one two three four five six seven',subtitleStatus:'ok',overlays:'special offer today only',overlayStatus:'ok',bgm:track,errors:[],duration:30,thumbnail:'data:image/jpeg;base64,AA==',...overrides});
-const template=(overrides={})=>feature({id:'template',sha:'b'.repeat(64),enabled:true,...overrides});
-test('each of the four dimensions independently permits a pass while all other scores are 100',()=>{
- for(const change of [{frames:[white]},{subtitles:'unrelated words on this other screen'},{overlays:'brand new amazing price'},{bgm:music(new Array(20).fill(frame(31)))}]){
-  const result=compare(feature(change),[template()]);assert.equal(result.status,'pass');assert.equal(result.score,0);assert.equal(result.best.highestScore,100);assert.equal(result.qualifying.length,1);
- }
-});
-test('exactly 70 passes, all scores above 70 fail, and the unrounded value decides',()=>{
- const refs=Array.from({length:10},(_,i)=>i<7?black:white),other=[black,{hash:'01'.repeat(31)+'0',color},{hash:'10'.repeat(31)+'1',color}];
- const result=compare(feature({frames:refs}),[template({frames:other})]);assert.equal(result.score,70);assert.equal(result.status,'pass');
- const above=compare(feature({frames:refs.map((x,i)=>i===7?black:x)}),[template({frames:other})]);assert.equal(above.score,80);assert.equal(above.status,'fail');
- const tokens=Array.from({length:3002},(_,i)=>'w'+i);const near=compare(feature({subtitles:tokens.join(' ')}),[template({subtitles:tokens.slice(0,2102).concat(Array.from({length:900},(_,i)=>'z'+i)).join(' ')})]);assert.equal(near.score.toFixed(1),'70.0');assert.ok(near.score>70);assert.equal(near.status,'fail');
-});
-test('BGM 70 is sufficient to pass even with every other score 100; 75 alone is not',()=>{
- const b=music(Array.from({length:20},(_,i)=>frame(i<14?i:31)));assert.equal(bgmSimilarity(track,b),70);const result=compare(feature(),[template({bgm:b})]);assert.equal(result.status,'pass');assert.deepEqual(result.qualifying,['bgm']);b.frames[14]=frame(14);assert.equal(compare(feature(),[template({bgm:b})]).status,'fail');
-});
-test('an identified low score passes despite other missing evidence',()=>{
- const r=compare(feature({frames:[white],subtitleStatus:'review',overlayStatus:'review',bgm:unknown}),[template()]);assert.equal(r.status,'pass');assert.equal(r.best.complete,false);assert.deepEqual(r.qualifying,['visual']);
-});
-test('unknown and both-absent dimensions cannot create a zero or automatic pass',()=>{
- const absent={subtitles:'',subtitleStatus:'none',overlays:'',overlayStatus:'none',bgm:none};const r=compare(feature(absent),[template(absent)]);assert.equal(r.status,'fail');assert.equal(r.best.subtitle,null);assert.equal(r.best.overlay,null);assert.equal(r.best.bgm,null);assert.equal(r.best.states.bgm,'none');
- const missing=compare(feature({subtitleStatus:'review',overlayStatus:'review',bgm:unknown}),[template()]);assert.equal(missing.status,'review');assert.equal(missing.best.subtitle,null);assert.equal(missing.best.bgm,null);const blank=compare(feature({subtitles:'',subtitleStatus:'ok',overlays:'',overlayStatus:'none',bgm:none}),[template({subtitles:'',subtitleStatus:'none',overlays:'',overlayStatus:'none',bgm:none})]);assert.equal(blank.status,'review');assert.equal(blank.best.subtitle,null);
-});
-test('confirmed absence versus reliably present content is a real zero',()=>{
- const r=compare(feature({subtitles:'',subtitleStatus:'none'}),[template()]);assert.equal(r.status,'pass');assert.equal(r.best.subtitle,0);assert.deepEqual(r.qualifying,['subtitle']);
-});
-test('identical file remains 100 and fails even when recognition is incomplete',()=>{
- const r=compare(feature({subtitleStatus:'review',overlayStatus:'review',bgm:unknown}),[template({sha:'a'.repeat(64)})]);assert.equal(r.score,100);assert.equal(r.status,'fail');
-});
-test('speech content and recognition status never affect a result',()=>{
- for(const speechStatus of ['ok','review',undefined]){const r=compare(feature({frames:[white],speech:'same spoken text',speechStatus}),[template({speech:'same spoken text'})]);assert.equal(r.status,'pass');assert.equal(r.best.speech,undefined);}
-});
-test('old recognition references stay unscored until re-prepared',()=>{
- const r=compare(feature({frames:[white]}),[template({version:'clipguard-2'})]);assert.equal(r.status,'review');assert.equal(r.best.visual,null);assert.equal(r.best.subtitle,null);assert.equal(r.best.overlay,null);assert.equal(r.best.legacy,true);assert.equal(compare(feature({bgm:unknown}),[template({version:'clipguard-2',bgm:unknown})]).status,'review');
-});
-test('no enabled or selected template never passes',()=>{assert.equal(compare(feature(),[]).status,'review');assert.equal(compare(feature(),[template({enabled:false})]).status,'review');});
-test('screen text is split by line location; uncertain text is never fabricated',()=>{
- const data={blocks:[{paragraphs:[{lines:[{text:'SPECIAL OFFER',confidence:90,bbox:{y0:100,y1:140}},{text:'Daily video subtitle',confidence:92,bbox:{y0:300,y1:330}},{text:'uncertain',confidence:15,bbox:{y0:30,y1:50}}]}]}]};
- assert.deepEqual(splitScreenText(data,360),{subtitles:'Daily video subtitle',overlays:'SPECIAL OFFER',unassigned:''});assert.equal(splitScreenText({text:'fallback full-frame text'},360).unassigned,'fallback full-frame text');assert.equal(splitScreenText({text:'fallback full-frame text'},360).subtitles,'');
-});
-test('English text normalizes punctuation and detects containment',()=>{assert.equal(textSimilarity('Hello, this is a sentence!','hello this is a sentence'),100);assert.equal(textSimilarity('one two three four five','intro one two three four five final'),100);assert.equal(textSimilarity('','text'),null);assert.equal(textSimilarity('different words','unrelated phrases'),0);});
-test('new features validate both independent text fields and reject bad data',()=>{
- assert.equal(validFeature(feature()),true);assert.equal(validFeature(feature({duration:600})),true);for(const bad of [{version:'clipguard-2'},{overlays:undefined},{overlayStatus:'invalid'},{thumbnail:'javascript:alert(1)'},{duration:0},{frames:[]},{bgm:{...none,status:'ok'}}])assert.equal(validFeature(feature(bad)),false);
-});
-test('visual fingerprints are deterministic and discriminate colors',()=>{
- const pixels=new Uint8ClampedArray(4096);for(let i=0;i<1024;i++){pixels[i*4]=255;pixels[i*4+3]=255;}const red=fingerprint(pixels);assert.deepEqual(fingerprint(pixels),red);for(let i=0;i<1024;i++){pixels[i*4]=0;pixels[i*4+2]=255;}assert.equal(visualSimilarity([red],[fingerprint(pixels)]),0);
-});
-function melody(notes,seconds=8,gain=.7){return Float32Array.from({length:seconds*8000},(_,i)=>gain*Math.sin(2*Math.PI*notes[Math.floor(i/2000)%notes.length]*i/8000));}
-test('PCM music tolerates volume and trimming; different music stays low',()=>{
- const samples=melody([160,440,260,880,330,620,1100,200]),a=music(musicFingerprint(samples)),b=music(musicFingerprint(Float32Array.from(samples.subarray(16000),v=>v*.2))),c=music(musicFingerprint(melody([1700,2200,3000,1300])));assert.equal(validBgm(a),true);assert.ok(bgmSimilarity(a,b)>95);assert.ok(bgmSimilarity(a,c)<70);assert.equal(bgmSimilarity(a,none),0);assert.equal(bgmSimilarity(a,unknown),null);
-});
-
-test('ordered text comparison tolerates OCR typos and inserted placements without changing word order',()=>{
- const original='take the scenic railway journey through beautiful english countryside';
- assert.equal(textSimilarity(original,'take the scenic sponsored railway journey through beautifu1 english countryside'),100);
- assert.equal(textSimilarity(original,'unrelated football match score tonight'),0);
- assert.ok(textSimilarity(original,wordsForTestReverse(original))<70);
-});
-function wordsForTestReverse(t){return t.split(' ').reverse().join(' ');}
-test('low confidence screen fragments and insufficient text cannot create reliable low scores',()=>{
- const line=(text,confidence)=>({text,confidence,bbox:{y0:300,y1:330}}),data={blocks:[{paragraphs:[{lines:[line('i',99),line('785',99),line('A 1',99),line('uncertain caption text',45),line('Daily railway journey today',90)]}]}]};
- assert.equal(splitScreenText(data,360).subtitles,'Daily railway journey today');assert.equal(reliableText('i 3 a 785 AN 1'),false);assert.equal(reliableText('real english subtitle sentence'),true);assert.equal(reliableText('tiny caption'),false);
-});
-test('local texture retains matching scenes under partial overlays without matching blank borders or unrelated scenes',()=>{
- const tile=(hash,detail=40)=>({hash,color,detail});const a={...black,tiles:Array.from({length:9},()=>tile('0'.repeat(63)))};
- const edited={...white,tiles:a.tiles.map((t,i)=>i<3?tile('1'.repeat(63)):t)};
- assert.equal(localFrameMatch(a,edited),true);assert.equal(visualSimilarity([a],[edited]),100);
- const unrelated={...white,tiles:a.tiles.map(()=>tile('1'.repeat(63)))};assert.equal(localFrameMatch(a,unrelated),false);assert.equal(visualSimilarity([a],[unrelated]),0);
- assert.equal(localFrameMatch({...a,tiles:a.tiles.map(()=>tile('0'.repeat(63),0))},edited),false);
- assert.equal(localFrameMatch(a,{...edited,tiles:a.tiles.map((t,i)=>i<6?tile('1'.repeat(63)):t)}),false);
- assert.equal(validFeature(feature({frames:[{...a,tiles:[{}]}]})),false);
-});
-
-test('one click queues all outdated references while current and unselected pending references stay untouched',async()=>{const {referenceUpdateTargets}=await import('../reference-update.js');const templates=[{id:'old-a',referenceUpdateRequired:true,featureReady:false},{id:'current',referenceUpdateRequired:false,featureReady:true},{id:'old-b',referenceUpdateRequired:true,featureReady:false},{id:'pending',referenceUpdateRequired:false,featureReady:false}];assert.deepEqual(referenceUpdateTargets(templates).map(t=>t.id),['old-a','old-b']);assert.deepEqual(referenceUpdateTargets(templates,'pending').map(t=>t.id),['old-a','old-b','pending']);assert.deepEqual(referenceUpdateTargets(templates,'old-a').map(t=>t.id),['old-a','old-b']);});
+import {reportScore,scoreLabel} from '../report-score.js';
+import {feature,frames,proof,alpha,colors,color} from './evidence-fixture.mjs';
+const template=(o={})=>feature({id:'template',enabled:true,sha:'b'.repeat(64),...o});
+test('one reliable low text item still passes even when other dimensions repeat',()=>{const r=compare(feature({subtitles:colors}),[template()]);assert.equal(r.status,'pass');assert.deepEqual(r.qualifying,['subtitle']);assert.equal(r.score,100);assert.equal(r.best.decisionScore,0);});
+test('only reliable dimensions decide and exactly 70 is allowed without rounding',()=>{const a=frames('a',14),b=frames('b',6),c=frames('c',6),f=feature({frames:[...a,...b]}),t=template({frames:[...a,...c]});assert.equal(compare(f,[t]).best.visual,70);assert.equal(compare(f,[t]).status,'pass');const above=feature({frames:[...frames('a',15),...frames('b',5)]});assert.ok(compare(above,[template({frames:[...frames('a',15),...frames('c',5)]})]).best.visual>70);assert.equal(compare(above,[template({frames:[...frames('a',15),...frames('c',5)]})]).status,'fail');});
+test('no matching visual frames is uncertainty, not zero and not a pass',()=>{const r=compare(feature({frames:frames('b')}),[template()]);assert.equal(r.best.rawVisual,0);assert.equal(r.best.visual,null);assert.equal(r.status,'review');assert.equal(r.qualifying.length,0);assert.match(r.best.reasons.visual,/不作为通过依据/);});
+test('single-sided absence declarations cannot manufacture zero for text or music',()=>{const r=compare(feature({subtitles:'',subtitleStatus:'none',overlays:'',overlayStatus:'none',bgm:{status:'none',source:'declared-none',frames:[]}}),[template({bgm:{status:'review',source:'unconfirmed',frames:[]}})]);assert.equal(r.status,'review');assert.equal(r.best.subtitle,null);assert.equal(r.best.overlay,null);assert.equal(r.best.bgm,null);});
+test('both absent dimensions stay inapplicable while identical files fail regardless of missing evidence',()=>{const f=feature({sha:'same',subtitles:'',subtitleStatus:'none',overlays:'',overlayStatus:'none',evidence:undefined}),r=compare(f,[template({...f})]);assert.equal(r.status,'fail');assert.equal(r.score,100);assert.equal(r.best.subtitle,null);});
+test('insufficient words, low OCR coverage and legacy evidence do not qualify as reliable low scores',()=>{assert.equal(reliableText('special offer today only'),false);assert.equal(reliableText(alpha),true);for(const o of [{subtitles:'special offer today only'},{evidence:undefined},{evidence:{...proof(frames()),subtitleFrames:[0]}}]){const r=compare(feature(o),[template()]);assert.equal(r.best.subtitle,null);assert.equal(r.qualifying.includes('subtitle'),false);}});
+test('a fully validated low text result can pass despite other missing evidence',()=>{const r=compare(feature({subtitles:colors,overlayStatus:'review',bgm:{status:'review',source:'unconfirmed',frames:[]}}),[template()]);assert.equal(r.status,'pass');assert.equal(r.best.complete,false);assert.deepEqual(r.qualifying,['subtitle']);});
+test('evidence times, sample counts and frame indexes validate and malformed evidence is rejected',()=>{const f=feature();assert.equal(validFeature(f),true);assert.equal(hasEvidence(f),true);for(const change of [{sampleCount:2},{sampleTimes:[-1]},{subtitleFrames:[0,0]},{overlayFrames:[999]}])assert.equal(validFeature({...f,evidence:{...f.evidence,...change}}),false);assert.equal(validFeature({...f,duration:600,evidence:proof(f.frames,600)}),true);});
+test('speech never influences the score and no template never passes',()=>{assert.deepEqual(compare(feature(),[template()]),compare(feature({speech:'totally changed'}),[template()]));assert.equal(compare(feature(),[]).status,'review');});
+test('historical minimum zero is displayed using existing maximum, without pretending a re-audit occurred',()=>{const old={score:0,best:{visual:0,subtitle:48.3333,overlay:65.9619,bgm:null}};assert.equal(reportScore(old),65.9619);assert.equal(old.score,0);assert.equal(scoreLabel(0),'未检出匹配');assert.equal(scoreLabel(null),'证据不足');});
+test('ordered text matching normalizes and tolerates a minor OCR typo and inserted words',()=>{assert.equal(textSimilarity('take the beautiful scenic railway','take the beautifu1 scenic sponsored railway'),100);assert.equal(textSimilarity(alpha,colors),0);assert.equal(textSimilarity('','words'),null);});
+test('screen fragments remain filtered and screen grouping retains evidence positions',()=>{const data={blocks:[{paragraphs:[{lines:[{text:'i',confidence:99,bbox:{y0:10,y1:20}},{text:'Daily scenic railway journey',confidence:90,bbox:{y0:300,y1:330}},{text:'Special promotional offer message',confidence:90,bbox:{y0:50,y1:80}}]}]}]};assert.equal(splitScreenText(data,360).subtitles,'Daily scenic railway journey');assert.equal(splitScreenText(data,360).overlays,'Special promotional offer message');});
+test('local matching tolerates limited overlays but not unrelated scenes or blank borders',()=>{const a=frames()[0],edited={...frames('b')[0],tiles:a.tiles.map((t,i)=>i<3?frames('b')[0].tiles[i]:t)};assert.equal(localFrameMatch(a,edited),true);assert.equal(visualSimilarity([a],[edited]),100);assert.equal(localFrameMatch(a,frames('b')[0]),false);assert.equal(localFrameMatch({...a,tiles:a.tiles.map(t=>({...t,detail:0}))},edited),false);});
+test('pixel fingerprints remain deterministic and discriminate color',()=>{const pixels=new Uint8ClampedArray(4096);for(let i=0;i<1024;i++){pixels[i*4]=255;pixels[i*4+3]=255;}const red=fingerprint(pixels);assert.deepEqual(fingerprint(pixels),red);for(let i=0;i<1024;i++){pixels[i*4]=0;pixels[i*4+2]=255;}assert.equal(visualSimilarity([red],[fingerprint(pixels)]),0);});
+const music=fs=>({status:'ok',source:'clean-audio',version:BGM_VERSION,name:'music.wav',sha:'c'.repeat(64),duration:5,frames:fs}),tone=i=>Array.from({length:32},(_,k)=>k===i?255:0);
+test('pure BGM evidence remains validated and one-sided no-BGM is never a low score',()=>{const track=music(Array.from({length:20},(_,i)=>tone(i))),other=music(Array.from({length:20},(_,i)=>tone(i<14?i:31)));assert.equal(validBgm(track),true);assert.equal(bgmSimilarity(track,other),70);const r=compare(feature({duration:5,bgm:track}),[template({duration:5,bgm:other})]);assert.equal(r.status,'pass');assert.deepEqual(r.qualifying,['bgm']);const absent=compare(feature({bgm:{status:'none',source:'declared-none',frames:[]}}),[template({bgm:track})]);assert.equal(absent.best.bgm,null);assert.equal(absent.status,'review');});
+test('music fingerprints tolerate volume changes and distinguish different music',()=>{const samples=Float32Array.from({length:32000},(_,i)=>.7*Math.sin(2*Math.PI*(220+Math.floor(i/2000)%4*110)*i/8000));const a=music(musicFingerprint(samples)),b=music(musicFingerprint(samples.map(x=>x*.3)));assert.equal(bgmSimilarity(a,b),100);assert.equal(validBgm({...a,frames:[]}),false);});
