@@ -1,3 +1,4 @@
+import {auditWithRecovery} from './audit-recovery.js';
 import {compressVideo} from './video-compression.js';
 import {redlineBadge,redlinePanel,redlineChecklist,redlineResult,reviewOutcome} from './redline-ui.js';
 import {reportScore,scoreLabel,reviewOpinion,dimensionReason} from './report-score.js';
@@ -43,7 +44,13 @@ async function apiCall(path,options={}){
  let data;try{data=await response.json();}catch{throw new Error('共享后台响应异常');}if(!response.ok)throw new Error(data.error||'共享请求失败');return data;
 }
 function recordsQuery(offset=0){const q=new URLSearchParams({offset:String(offset)});if(search)q.set('search',search);if(filter)q.set('status',filter);if(dayFilter==='today')q.set('day','today');if(recordCategory)q.set('category',recordCategory);return '/api/records?'+q;}
+let storedRefreshDone=false,storedRefreshTask=null;
+async function refreshStoredReviews(){
+ if(storedRefreshDone)return;if(storedRefreshTask)return storedRefreshTask;
+ storedRefreshTask=(async()=>{try{for(let i=0;i<10;i++){const result=await apiCall('/api/reviews/refresh',{method:'POST',body:{}});if(!result.hasMore){storedRefreshDone=true;break;}}}catch{}finally{storedRefreshTask=null;}})();return storedRefreshTask;
+}
 async function refreshShared(reset=false){
+ await refreshStoredReviews();
  const epoch=++requestEpoch;try{const [a,b,c]=await Promise.all([apiCall('/api/templates'),apiCall(recordsQuery()),apiCall('/api/stats'),refreshRecent()]);if(epoch!==requestEpoch)return;templates=a.templates.map(t=>({...t,category:t.category||UNCATEGORIZED}));const map=new Map((reset?[]:records).map(r=>[r.id,r]));for(const r of b.records)map.set(r.id,{...r,shared:true});records=[...map.values()].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));recordTotal=b.total;hasMore=records.length<recordTotal;sharedStats=c;sharedReady=true;sharedError='';if(!document.activeElement?.matches('input,select,textarea'))render();else if($('#records-table')){$('#records-table').innerHTML=recordTable(filteredRecords());if($('#filtered-count'))$('#filtered-count').textContent=records.length+' / '+recordTotal+' 条';}}catch(e){if(epoch!==requestEpoch)return;sharedReady=false;sharedError=e.message;if(!document.activeElement?.matches('input,select,textarea'))render();}}
 async function refreshRecent(page=recentPage,show=false){
  const epoch=++recentEpoch,requested=Math.max(1,Math.floor(page)||1);const data=await apiCall('/api/records?limit=20&offset='+((requested-1)*20));if(epoch!==recentEpoch)return;
@@ -131,7 +138,7 @@ const checkPipeline=createUploadPipeline({
   const init=await apiCall('/api/uploads',{method:'POST',body:{name:q.file.name,member:q.member,size:q.uploadFile.size,mime:q.uploadFile.type,kind:'video',category:q.category,templateId:q.templateId}});q.sharedId=init.id;q.templateSnapshotCaptured=!!init.templateSnapshotCaptured;if(init.selectedTemplateName)q.templateName=init.selectedTemplateName;
   q.state='上传中';refreshQueue();await apiCall(init.uploadUrl,{method:'PUT',headers:uploadHeaders(q),body:q.uploadFile});releaseUploadFile(q);q.state='已上传 · 等待审核';
  },
- async audit(q){q.state='审核中';refreshQueue();const options={...q};const f=await extract(q.file,p=>{progress=q.file.name+'：'+p;const t=$('#progress-text');if(t)t.textContent=progress;},options);const result=await apiCall('/api/uploads/'+q.sharedId+'/finalize',{method:'POST',body:{feature:f}});records=records.filter(r=>r.id!==q.sharedId);records.push({...result.record,shared:true});q.state=label[result.record.status];},
+ async audit(q){const recovered=await auditWithRecovery({extract:extra=>extract(q.file,p=>{progress=q.file.name+'：'+p;const t=$('#progress-text');if(t)t.textContent=progress;},{...q,...extra}),evaluate:feature=>apiCall('/api/uploads/'+q.sharedId+'/evaluate',{method:'POST',body:{feature}}),onProgress:message=>{q.state=message;refreshQueue();}});const result=await apiCall('/api/uploads/'+q.sharedId+'/finalize',{method:'POST',body:{feature:recovered.feature,auditAttempts:recovered.attempts}});records=records.filter(r=>r.id!==q.sharedId);records.push({...result.record,shared:true});q.state=label[result.record.status];await refreshShared(true);},
  async onError(q,e,phase){q.state=(phase==='upload'?'上传失败：':'审核未完成：')+e.message;if(q.sharedId)try{const result=await apiCall('/api/uploads/'+q.sharedId+'/finalize',{method:'POST',body:{error:e.message}});records=records.filter(r=>r.id!==q.sharedId);records.push({...result.record,shared:true});}catch{}},
  onChange(state){busy=state.running;stop=state.stopping;renderMember();refreshQueue();}
 });
