@@ -76,3 +76,5 @@ button.review-outcome{cursor:pointer;transition:filter .15s}button.review-outcom
 .report-dimension .dimension-reason{margin:12px 0 0;color:#606975;font-size:13px;line-height:1.7;white-space:pre-line;font-weight:400;overflow-wrap:anywhere}
 
 .review-opinion.pending-opinion{color:#876332;-webkit-line-clamp:3}
+
+.report-dialog .content-notices{background:#fffbeb;border-color:#e8cf88}.report-dialog .content-notices q,.report-dialog .content-notices li::marker{color:#946200}.audio-check-note{color:#6b7280;font-size:13px}
