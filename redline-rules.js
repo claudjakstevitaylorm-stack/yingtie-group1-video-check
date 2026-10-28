@@ -1,4 +1,4 @@
-export const REDLINE_VERSION='image-redlines-20261028-7';
+export const REDLINE_VERSION='image-redlines-20261028-8';
 const operators='GWR|LNER|Avanti(?: West Coast)?|ScotRail|Thameslink|Southern|Northern|South Western Railway|Greater Anglia|Chiltern Railways|Elizabeth line';
 // These are review cues from the new screenshots, not automatic compliance verdicts.
 export const REDLINES=[
@@ -18,7 +18,7 @@ export const REDLINES=[
  {id:'RL-14',title:'虚假评价与虚假回复',check:'人工核对评价、回复和口碑来源，打码不等于来源真实。',suggestion:'不发布虚构评价或伪造用户回复。'},
  {id:'RL-15',title:'5000粉以上KOL/网红怼脸素材',check:'人工核实是否属于截图限定的5000粉以上KOL及怼脸素材；不能从脸或画质猜粉丝量。与授权/短时/侧脸豁免需核对。',suggestion:'核实人物及授权、替换素材或按适用规则处理。',conflict:true},
  {id:'RL-16',title:'路线绝对报价缺少from/起',check:'检查具体路线“只需£x”等绝对价格表述；提示回看票价支持和实际文案。',suggestion:'优先改为London to Liverpool from £x等“£x起”，金额必须真实。',conflict:true,patterns:[/\b[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}\s+to\s+[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}\s+(?:(?:only|just|for)\s*)?£\s*\d+(?:\.\d{1,2})?/g,/(?:伦敦|利物浦|爱丁堡|曼彻斯特).{0,12}(?:只需|只要)\s*[£￡]?\s*\d+/g]},
- {id:'RL-17',title:'英文语法、拼写及TrainPal名称',check:'人工核对英语语法、语序、用词、标点；OCR中的TrainPal大小写和拆词空格差异不作为拼写错误；真实字母错拼保留提示，App原生文字需按适用豁免处理。',suggestion:'若确认为后加文案错拼，改为准确的TrainPal或TRAINPAL。',conflict:true,patterns:[/\btrain\s*pal\b/gi,/\b(?:tranipal|trianpal|trainpall)\b/gi],skip:skipBrandOcr},
+ {id:'RL-17',title:'英文语法、拼写及TrainPal名称',enabled:false,check:'已停用品牌拼写自动判断，避免OCR误读产生红线提示。',suggestion:'品牌拼写不参与自动红线判断。'},
  {id:'RL-18',title:'工作人员不会告诉你的话术',check:'检查“乘务员不会告诉你”“staff won’t tell you”等暗示，不把普通staff单词本身当违规。',suggestion:'改为客观、可核验的公开购票信息，避免踩工作人员。',conflict:true,patterns:[/\b(?:staff|conductors?|train crew)\s+(?:won.?t|will not|do not|don.?t|never)\s+(?:ever\s+)?tell\s+you\b/gi,/(?:乘务员|工作人员|员工).{0,10}(?:不会|不肯|不愿).{0,5}告诉你/g]},
  {id:'RL-19',title:'90% off优惠券承诺',check:'检查90% off优惠券话术，按实际产品、活动和上限核实，不能自动把所有优惠均改成20%。',suggestion:'删除不符合实际活动的90% off承诺，使用有依据的20% off等口径。',patterns:[/\b90\s*%\s*(?:off|discount)\b/gi,/(?:优惠券|折扣券).{0,15}90\s*%/g]},
  {id:'RL-20',title:'英镑符号和币种',check:'人工核对£符号、票价币种及计价含义，不仅凭另一币种出现就认定错误。',suggestion:'使用与真实价格及活动一致的币种符号。'},
@@ -26,31 +26,6 @@ export const REDLINES=[
  {id:'RL-22',title:'choose/go with特定运营商',check:'检查choose/go with特定TOC的话术，不把客观线路说明、try或take a look at当作相同表述。',suggestion:'按截图改为could go GWR、try GWR、take a look at等较弱表述。',conflict:true,patterns:[new RegExp('\\b(?:choose|go(?:\\s+with)?)\\s+(?:the\\s+)?(?:'+operators+')\\b','gi')],skip:(match,prefix)=>/\b(?:could|might|may)\s*$/i.test(prefix)},
  {id:'RL-23',title:'Platform-subsidised用词',check:'检查Platform-subsidised / Platform-subsidized / 平台补贴等表述。',suggestion:'按截图改为Retailer-subsidised（供应商补贴），并核实实际活动含义。',patterns:[/\bplatform[\s=‐‑–-]+subsidi[sz]ed\b/gi,/平台补贴/g]}
 ].map(rule=>({enabled:true,...rule}));
-// Compare the same caption phrase across OCR observations. A correct app logo
-// elsewhere cannot excuse a misspelling in a different caption.
-function skipBrandOcr(match,_prefix,context){
- if(!context?.channel?.endsWith('OCR'))return match==='TrainPal'||match==='TRAINPAL';
- const normalized=match.replace(/\s+/g,'').toLowerCase();
- if(normalized==='trainpal')return true;
- const key=context.channel==='字幕OCR'?'subtitles':'overlays',input=context.input;
- const samples=input.evidence?.textSamples;
- if(Array.isArray(samples)){
-  const frames=new Set(samples.filter(sample=>Number.isInteger(sample?.frame)&&typeof sample[key]==='string'&&Array.from(sample[key].matchAll(/\b(?:tranipal|trianpal|trainpall)\b/gi)).some(hit=>hit[0].toLowerCase()===normalized)).map(sample=>sample.frame));
-  if(frames.size>=2)return false;
- }
- const phrase=(text,index,length)=>{
-  const start=text.lastIndexOf('\n',index-1)+1,end=text.indexOf('\n',index+length);
-  const words=value=>value.toLowerCase().match(/[a-z0-9£]+/g)||[];
-  return {before:words(text.slice(start,index)).slice(-3),after:words(text.slice(index+length,end<0?text.length:end)).slice(0,3)};
- };
- const candidate=phrase(context.text,context.index,match.length);
- if(candidate.before.length+candidate.after.length<2)return false;
- const full=typeof input[key]==='string'?input[key]:context.text;
- return Array.from(full.matchAll(/\btrain\s*pal\b/gi)).some(hit=>{
-  const correct=phrase(full,hit.index,hit[0].length);
-  return candidate.before.join(' ')===correct.before.join(' ')&&candidate.after.join(' ')===correct.after.join(' ');
- });
-}
 export function scanRedlines(input={}){
  const channels=[['字幕OCR',input.subtitles],['花字OCR',input.overlays],['补充文案',input.supplementalText]],items=[];
  for(const rule of REDLINES.filter(r=>r.enabled&&r.patterns)){const matches=[];for(const [channel,value] of channels){if(typeof value!=='string')continue;const text=value.slice(0,30000);for(const original of rule.patterns){const pattern=new RegExp(original.source,original.flags);for(const found of text.matchAll(pattern)){const prefix=text.slice(Math.max(0,found.index-24),found.index);if(rule.skip?.(found[0],prefix,{channel,input,text,index:found.index}))continue;const excerpt=text.slice(Math.max(0,found.index-35),Math.min(text.length,found.index+found[0].length+55)).trim();if(!matches.some(m=>m.channel===channel&&m.matched===found[0]))matches.push({channel,matched:found[0],excerpt});if(matches.length>=3)break;}if(matches.length>=3)break;}if(matches.length>=3)break;}for(const match of matches)match.ranges=redlineTimeRanges(input,rule,match);if(matches.length)items.push({id:rule.id,title:rule.title,check:rule.check,suggestion:rule.suggestion,conflictingPolicy:!!rule.conflict,status:'notice-only',matches});}
