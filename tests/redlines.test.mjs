@@ -39,3 +39,16 @@ test('allowed capitalization in other frames is not attributed to a redline occu
 
 test('OCR brand capitalization and whitespace differences are not spelling errors',()=>{for(const channel of ['subtitles','overlays'])for(const text of ['TrainPal','TRAINPAL','Trainpal','trainpal','Train Pal','TRAIN PAL','Train\npal'])assert.equal(scanRedlines({[channel]:text}).items.some(r=>r.id==='RL-17'),false);for(const word of ['TraniPal','Trianpal','TrainPall'])assert.ok(ids(word).includes('RL-17'));assert.ok(scanRedlines({supplementalText:'trainpal'}).items.some(r=>r.id==='RL-17'));});
 test('a historical isolated Trainpal OCR variation is cleared without changing duplicate scores or other alerts',()=>{const old={state:'complete',status:'pass',score:67.7,overlays:'Download TrainPal Search cs6\nDownload Trainpal Search cs6',redlineHints:{version:'image-redlines-20261027-5',items:[{id:'RL-17'}]}};assert.equal(reviewOutcome(old).label,'通过');assert.equal(redlinePanel(old),'');assert.equal(old.score,67.7);assert.equal(old.redlineHints.items.length,1);assert.equal(reviewOutcome({...old,subtitles:'Platform-subsidised'}).tone,'fail');});
+
+
+test('isolated brand OCR punctuation confusion is ignored only with the same correctly read caption phrase',()=>{
+ const r={state:'complete',status:'pass',score:46,overlays:'£2.49 off & no booking fees on TrainPal!\nbooking fees on TrainPal!\nbooking fees on TrainPall',evidence:{textSamples:[{frame:64,overlays:'booking fees on TrainPall'}]},redlineHints:{version:'image-redlines-20261028-6',items:[{id:'RL-17'}]}};
+ assert.equal(scanRedlines(r).items.length,0);assert.equal(reviewOutcome(r).label,'通过');assert.equal(r.score,46);assert.equal(r.redlineHints.items.length,1);
+ assert.ok(scanRedlines({...r,supplementalText:'booking fees on TrainPall'}).items.some(i=>i.id==='RL-17'));
+ assert.ok(scanRedlines({...r,overlays:'TRAINPAL\nbooking fees on TrainPall'}).items.some(i=>i.id==='RL-17'));
+ assert.ok(scanRedlines({...r,subtitles:'Platform-subsidised'}).items.some(i=>i.id==='RL-23'));
+});
+test('repeated consistent brand misspellings remain flagged despite another correctly read caption',()=>{
+ const r={overlays:'booking fees on TrainPal!\nbooking fees on TrainPall',evidence:{textSamples:[{frame:1,overlays:'booking fees on TrainPall'},{frame:2,overlays:'booking fees on TrainPall'}]}};
+ assert.ok(scanRedlines(r).items.some(i=>i.id==='RL-17'));
+});
