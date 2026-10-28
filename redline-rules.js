@@ -1,4 +1,4 @@
-export const REDLINE_VERSION='image-redlines-20261027-5';
+export const REDLINE_VERSION='image-redlines-20261028-6';
 const operators='GWR|LNER|Avanti(?: West Coast)?|ScotRail|Thameslink|Southern|Northern|South Western Railway|Greater Anglia|Chiltern Railways|Elizabeth line';
 // These are review cues from the new screenshots, not automatic compliance verdicts.
 export const REDLINES=[
@@ -18,7 +18,7 @@ export const REDLINES=[
  {id:'RL-14',title:'虚假评价与虚假回复',check:'人工核对评价、回复和口碑来源，打码不等于来源真实。',suggestion:'不发布虚构评价或伪造用户回复。'},
  {id:'RL-15',title:'5000粉以上KOL/网红怼脸素材',check:'人工核实是否属于截图限定的5000粉以上KOL及怼脸素材；不能从脸或画质猜粉丝量。与授权/短时/侧脸豁免需核对。',suggestion:'核实人物及授权、替换素材或按适用规则处理。',conflict:true},
  {id:'RL-16',title:'路线绝对报价缺少from/起',check:'检查具体路线“只需£x”等绝对价格表述；提示回看票价支持和实际文案。',suggestion:'优先改为London to Liverpool from £x等“£x起”，金额必须真实。',conflict:true,patterns:[/\b[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}\s+to\s+[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}\s+(?:(?:only|just|for)\s*)?£\s*\d+(?:\.\d{1,2})?/g,/(?:伦敦|利物浦|爱丁堡|曼彻斯特).{0,12}(?:只需|只要)\s*[£￡]?\s*\d+/g]},
- {id:'RL-17',title:'英文语法、拼写及TrainPal名称',check:'人工核对英语语法、语序、用词、标点；TrainPal及TRAINPAL均允许；其余大小写和拼写需回看原画面，OCR误读及App原生文字豁免不得当作确认违规。',suggestion:'若确认为后加文案错拼，改为准确的TrainPal或TRAINPAL。',conflict:true,patterns:[/\btrain\s*pal\b/gi,/\b(?:tranipal|trianpal|trainpall)\b/gi],skip:match=>match==='TrainPal'||match==='TRAINPAL'},
+ {id:'RL-17',title:'英文语法、拼写及TrainPal名称',check:'人工核对英语语法、语序、用词、标点；OCR中的TrainPal大小写和拆词空格差异不作为拼写错误；真实字母错拼保留提示，App原生文字需按适用豁免处理。',suggestion:'若确认为后加文案错拼，改为准确的TrainPal或TRAINPAL。',conflict:true,patterns:[/\btrain\s*pal\b/gi,/\b(?:tranipal|trianpal|trainpall)\b/gi],skip:(match,_prefix,context)=>context?.channel?.endsWith('OCR')?match.replace(/\s+/g,'').toLowerCase()==='trainpal':match==='TrainPal'||match==='TRAINPAL'},
  {id:'RL-18',title:'工作人员不会告诉你的话术',check:'检查“乘务员不会告诉你”“staff won’t tell you”等暗示，不把普通staff单词本身当违规。',suggestion:'改为客观、可核验的公开购票信息，避免踩工作人员。',conflict:true,patterns:[/\b(?:staff|conductors?|train crew)\s+(?:won.?t|will not|do not|don.?t|never)\s+(?:ever\s+)?tell\s+you\b/gi,/(?:乘务员|工作人员|员工).{0,10}(?:不会|不肯|不愿).{0,5}告诉你/g]},
  {id:'RL-19',title:'90% off优惠券承诺',check:'检查90% off优惠券话术，按实际产品、活动和上限核实，不能自动把所有优惠均改成20%。',suggestion:'删除不符合实际活动的90% off承诺，使用有依据的20% off等口径。',patterns:[/\b90\s*%\s*(?:off|discount)\b/gi,/(?:优惠券|折扣券).{0,15}90\s*%/g]},
  {id:'RL-20',title:'英镑符号和币种',check:'人工核对£符号、票价币种及计价含义，不仅凭另一币种出现就认定错误。',suggestion:'使用与真实价格及活动一致的币种符号。'},
@@ -28,7 +28,7 @@ export const REDLINES=[
 ].map(rule=>({enabled:true,...rule}));
 export function scanRedlines(input={}){
  const channels=[['字幕OCR',input.subtitles],['花字OCR',input.overlays],['补充文案',input.supplementalText]],items=[];
- for(const rule of REDLINES.filter(r=>r.enabled&&r.patterns)){const matches=[];for(const [channel,value] of channels){if(typeof value!=='string')continue;const text=value.slice(0,30000);for(const original of rule.patterns){const pattern=new RegExp(original.source,original.flags);for(const found of text.matchAll(pattern)){const prefix=text.slice(Math.max(0,found.index-24),found.index);if(rule.skip?.(found[0],prefix))continue;const excerpt=text.slice(Math.max(0,found.index-35),Math.min(text.length,found.index+found[0].length+55)).trim();if(!matches.some(m=>m.channel===channel&&m.matched===found[0]))matches.push({channel,matched:found[0],excerpt});if(matches.length>=3)break;}if(matches.length>=3)break;}if(matches.length>=3)break;}for(const match of matches)match.ranges=redlineTimeRanges(input,rule,match);if(matches.length)items.push({id:rule.id,title:rule.title,check:rule.check,suggestion:rule.suggestion,conflictingPolicy:!!rule.conflict,status:'notice-only',matches});}
+ for(const rule of REDLINES.filter(r=>r.enabled&&r.patterns)){const matches=[];for(const [channel,value] of channels){if(typeof value!=='string')continue;const text=value.slice(0,30000);for(const original of rule.patterns){const pattern=new RegExp(original.source,original.flags);for(const found of text.matchAll(pattern)){const prefix=text.slice(Math.max(0,found.index-24),found.index);if(rule.skip?.(found[0],prefix,{channel,input,text}))continue;const excerpt=text.slice(Math.max(0,found.index-35),Math.min(text.length,found.index+found[0].length+55)).trim();if(!matches.some(m=>m.channel===channel&&m.matched===found[0]))matches.push({channel,matched:found[0],excerpt});if(matches.length>=3)break;}if(matches.length>=3)break;}if(matches.length>=3)break;}for(const match of matches)match.ranges=redlineTimeRanges(input,rule,match);if(matches.length)items.push({id:rule.id,title:rule.title,check:rule.check,suggestion:rule.suggestion,conflictingPolicy:!!rule.conflict,status:'notice-only',matches});}
  return{version:REDLINE_VERSION,mode:'text-alert-only',automaticDecision:false,items,hasTextEvidence:channels.some(([,text])=>typeof text==='string'&&text.trim().length>0),notAutomaticallyChecked:['原音口播','Logo和画面语义','人脸、人物授权及粉丝量','真实价格/评论来源','连续露出时长和面积'],notice:'仅基于已有OCR/提供文案的红线线索，须回看原片确认；不等于已完成内容审核，不改变查重结论。'};
 }
 
@@ -38,7 +38,7 @@ export function redlineTimeRanges(input,rule,match){
  if(!key||!Array.isArray(times)||!Array.isArray(samples)||!Number.isFinite(duration)||duration<=0||!times.length||times.some((t,i)=>!Number.isFinite(t)||t<0||t>=duration||(i&&t<=times[i-1])))return [];
  const normalize=s=>s.replace(/\s+/g,' ').trim(),indices=[];
  for(const sample of samples){const i=sample?.frame,text=sample?.[key];if(!Number.isInteger(i)||i<0||i>=times.length||typeof text!=='string')continue;
-  const hit=rule.patterns.some(original=>Array.from(text.matchAll(new RegExp(original.source,original.flags))).some(found=>!rule.skip?.(found[0],text.slice(Math.max(0,found.index-24),found.index))&&normalize(found[0])===normalize(match.matched)));
+  const hit=rule.patterns.some(original=>Array.from(text.matchAll(new RegExp(original.source,original.flags))).some(found=>!rule.skip?.(found[0],text.slice(Math.max(0,found.index-24),found.index),{channel:match.channel,input,text})&&normalize(found[0])===normalize(match.matched)));
   if(hit)indices.push(i);
  }
  const windows=[];for(const i of [...new Set(indices)].sort((a,b)=>a-b)){const start=i===0?0:(times[i-1]+times[i])/2,end=i===times.length-1?duration:(times[i]+times[i+1])/2,last=windows.at(-1);if(last&&i===last.last+1){last.end=end;last.last=i;}else windows.push({start,end,last:i});}
