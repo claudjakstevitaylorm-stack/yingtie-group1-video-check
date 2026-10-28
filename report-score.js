@@ -43,5 +43,5 @@ export function pendingReviewReason(r){
   if(key==='bgm'&&parts.length)text='';
   if(text)parts.push(labels[key]+'：'+text);
  }
- return parts.length?(r.automaticAudit?.exhausted?'已自动加强识别，仍缺少可靠证据。':'本次审核已结束，仍待复核。')+parts.join('。')+'。':'识别结果不完整，暂时无法确定是否通过，请重新审核。';
+ return parts.length?(r.automaticAudit?.exhausted?'已自动加强识别，仍缺少可靠证据。':'本次审核已结束，仍待复核。')+parts.join('。')+'。':'识别结果不完整，暂不能判定；请确认模板是否对应。';
 }
