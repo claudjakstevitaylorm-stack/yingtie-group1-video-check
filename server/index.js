@@ -1,5 +1,5 @@
 import {AUDIT_PROFILE} from '../audit-recovery.js';
-import {dailyUploads} from '../daily-uploads.js';
+import {dailyUploads,uploadDay} from '../daily-uploads.js';
 import {ALL_CATEGORIES,UNCATEGORIZED} from '../categories.js';
 import {composeTemplateName,templateNameParts} from '../template-name.js';
 import assets from '../.sites-runtime/assets.js';
@@ -55,7 +55,7 @@ export async function api(request,env){
  if(path==='/api/health'&&request.method==='GET'){await env.DB.prepare('SELECT id FROM shared_uploads LIMIT 1').first();return json({shared:true,version:VERSION,ruleVersion:RULE_VERSION,threshold:THRESHOLD,maxSize:null});}
  if(path==='/api/templates'&&request.method==='GET'){const hash=await owner(request);return json(u.searchParams.get('summary')==='1'?await templateSummaries(env,hash):{templates:await templateList(env,hash),categories:ALL_CATEGORIES});}
  const singleTemplate=/^\/api\/templates\/([^/]+)$/.exec(path);if(singleTemplate&&request.method==='GET'){if(!ID.test(singleTemplate[1]))fail('模板编号不正确');const list=await templateList(env,await owner(request)),template=list.find(t=>t.id===singleTemplate[1]);if(!template)fail('模板不存在',404);return json({template});}
- if(path==='/api/stats'&&request.method==='GET')return json(await dailyUploads(env));
+ if(path==='/api/stats'&&request.method==='GET')return json(await dailyUploads(env,new Date(),u.searchParams.get('date')||''));
  if(path==='/api/reviews/refresh'&&request.method==='POST'){
   await owner(request,true);
   const where="kind='video' AND state='complete' AND status='review' AND template_snapshot IS NOT NULL AND json_extract(report,'$.algorithm') LIKE 'clipguard-4-evidence-%' AND json_extract(report,'$.algorithm')!=? AND json_extract(report,'$.evidence.sampleCount') IS NOT NULL";
@@ -73,7 +73,7 @@ export async function api(request,env){
   const result=compare(f,templates);return json({status:result.status,hasTextEvidence:scanRedlines(f).hasTextEvidence});
  }
  if(path==='/api/records'&&request.method==='GET'){
-  const clauses=["kind='video'"],args=[];const search=(u.searchParams.get('search')||'').slice(0,100);if(search){clauses.push('(instr(lower(name),lower(?))>0 OR instr(lower(member),lower(?))>0)');args.push(search,search);}const category=u.searchParams.get('category');if(category){categoryName(category);clauses.push('category=?');args.push(category);}const filter=u.searchParams.get('status');if(['pass','fail','review'].includes(filter)){clauses.push(filter==='review'?"(status='review' OR status IS NULL)":'status=?');if(filter!=='review')args.push(filter);}if(u.searchParams.get('day')==='today'){const d=new Date(Date.now()+8*3600000).toISOString().slice(0,10);clauses.push('created_at>=?');args.push(new Date(d+'T00:00:00+08:00').toISOString());}
+  const clauses=["kind='video'"],args=[];const search=(u.searchParams.get('search')||'').slice(0,100);if(search){clauses.push('(instr(lower(name),lower(?))>0 OR instr(lower(member),lower(?))>0)');args.push(search,search);}const category=u.searchParams.get('category');if(category){categoryName(category);clauses.push('category=?');args.push(category);}const filter=u.searchParams.get('status');if(['pass','fail','review'].includes(filter)){clauses.push(filter==='review'?"(status='review' OR status IS NULL)":'status=?');if(filter!=='review')args.push(filter);}if(u.searchParams.has('date')){const range=uploadDay(new Date(),u.searchParams.get('date'));clauses.push('created_at>=? AND created_at<?');args.push(range.start,range.end);}else if(u.searchParams.get('day')==='today'){const d=new Date(Date.now()+8*3600000).toISOString().slice(0,10);clauses.push('created_at>=?');args.push(new Date(d+'T00:00:00+08:00').toISOString());}
   const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));const requestedLimit=Number(u.searchParams.get('limit'));const limit=Number.isInteger(requestedLimit)&&requestedLimit>0?Math.min(100,requestedLimit):100;const where=clauses.join(' AND ');const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM shared_uploads WHERE '+where).bind(...args).first();const {results}=await env.DB.prepare('SELECT * FROM shared_uploads WHERE '+where+' ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?').bind(...args,limit,offset).all();const hash=await owner(request);return json({records:results.map(r=>cleanReport(r,hash)),total:count.total,hasMore:offset+results.length<count.total});
  }
  const detail=/^\/api\/records\/([^/]+)$/.exec(path);if(detail&&request.method==='GET'){const row=await uploadRow(env,detail[1]),report=cleanReport(row,await owner(request));if(report.best&&row.template_snapshot){const template=JSON.parse(row.template_snapshot);report.evidenceExplanation=explainEvidence(report,template,report.best);}return json(report);}

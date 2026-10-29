@@ -1,9 +1,10 @@
 // All records, not just the currently loaded 20-row page. UTC+8 calendar day.
-export function uploadDay(now=new Date()){const date=new Date(now.getTime()+8*3600000).toISOString().slice(0,10),start=new Date(date+'T00:00:00+08:00');return{date,start:start.toISOString(),end:new Date(start.getTime()+86400000).toISOString()};}
+export function uploadDay(now=new Date(),selected=''){const date=selected||new Date(now.getTime()+8*3600000).toISOString().slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date){const e=new Error('请选择有效日期');e.status=400;throw e;}const start=new Date(date+'T00:00:00+08:00');return{date,start:start.toISOString(),end:new Date(start.getTime()+86400000).toISOString()};}
+
 const fingerprints=new Map();
 const valid=s=>typeof s==='string'&&/^[a-f0-9]{64}$/.test(s);
-export async function dailyUploads(env,now=new Date()){
- const day=uploadDay(now),{results:rows}=await env.DB.prepare("SELECT id,member,state,status,created_at,video_ready,json_extract(report,'$.sha') AS sha,json_extract(report,'$.storage.sourceSha') AS source_sha,json_extract(report,'$.storage.storedSha') AS stored_sha FROM shared_uploads WHERE kind='video' AND created_at>=? AND created_at<? ORDER BY created_at DESC,id DESC").bind(day.start,day.end).all();
+export async function dailyUploads(env,now=new Date(),selected=''){
+ const day=uploadDay(now,selected),{results:rows}=await env.DB.prepare("SELECT id,member,state,status,created_at,video_ready,json_extract(report,'$.sha') AS sha,json_extract(report,'$.storage.sourceSha') AS source_sha,json_extract(report,'$.storage.storedSha') AS stored_sha FROM shared_uploads WHERE kind='video' AND created_at>=? AND created_at<? ORDER BY created_at DESC,id DESC").bind(day.start,day.end).all();
  const uploaded=rows.filter(r=>r.video_ready),parent=new Map(),find=x=>{if(!parent.has(x))parent.set(x,x);if(parent.get(x)!==x)parent.set(x,find(parent.get(x)));return parent.get(x);};
  // Both hashes link an original file and its automatic compressed copy, so a
  // retry of the stored copy does not become an extra video. No media download.
