@@ -8,7 +8,7 @@ function ranges(input,key,phrase){const times=input.evidence?.sampleTimes,sample
 const item=(id,title,suggestion,matches)=>({id,title,suggestion,noticeOnly:true,status:'notice-only',matches});
 export function contentChecks(input={}){
  const items=[],codes=new Map(),channels=[['subtitles','字幕OCR'],['overlays','花字OCR'],['supplementalText','补充文案']];
- for(const [key,channel]of channels){const text=typeof input[key]==='string'?input[key].slice(0,30000):'';
+ for(const [key,channel]of channels){const text=(key==='overlays'?[input.overlays,input.interfaceText].filter(Boolean).join('\n'):typeof input[key]==='string'?input[key]:'').slice(0,30000);
   for(const hit of codeMentions(text)){if(key!=='supplementalText'&&!repeated(input,key,hit.text))continue;if(!codes.has(hit.code))codes.set(hit.code,{channel,matched:hit.code,ranges:ranges(input,key,hit.text)});}
   // Scope numbers to a single product sentence. Mere co-occurrence across scenes
   // cannot establish a conflicting offer; these remain non-blocking cues.

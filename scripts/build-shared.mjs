@@ -1,6 +1,6 @@
 import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
 import {build} from 'esbuild';
-const files=['index.html','style.css','app.js','groups.js','local-workspace.js','audit-recovery.js','audit-media.js','engine.js','media-reader.js','video-compression.js','bgm.js','audio-quality.js','content-checks.js','recognizer.js','shared-config.js','categories.js','screen-text.js','template-name.js','reference-update.js','upload-pipeline.js','retry-review.js','template-picker.js','report-score.js','redline-rules.js','redline-ui.js'];
+const files=['index.html','style.css','app.js','groups.js','local-workspace.js','audit-recovery.js','audit-media.js','engine.js','media-reader.js','video-compression.js','bgm.js','audio-quality.js','content-checks.js','recognizer.js','shared-config.js','categories.js','screen-text.js','text-match.js','visual-match.js','template-name.js','reference-update.js','upload-pipeline.js','retry-review.js','template-picker.js','report-score.js','redline-rules.js','redline-ui.js'];
 const assets={};for(const file of files)assets['/'+file]=await readFile(file,'utf8');
 await mkdir('.sites-runtime',{recursive:true});
 await writeFile('.sites-runtime/assets.js','export default '+JSON.stringify(assets)+';\n');
