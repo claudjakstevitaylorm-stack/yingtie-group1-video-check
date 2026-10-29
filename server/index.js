@@ -77,15 +77,8 @@ export async function api(request,env){
  if(path==='/api/templates'&&request.method==='GET'){const hash=await owner(request);return json(u.searchParams.get('summary')==='1'?await templateSummaries(env,hash):{templates:await templateList(env,hash),categories:ALL_CATEGORIES});}
  const singleTemplate=/^\/api\/templates\/([^/]+)$/.exec(path);if(singleTemplate&&request.method==='GET'){if(!ID.test(singleTemplate[1]))fail('模板编号不正确');const list=await templateList(env,await owner(request)),template=list.find(t=>t.id===singleTemplate[1]);if(!template)fail('模板不存在',404);return json({template});}
  if(path==='/api/stats'&&request.method==='GET')return json(await dailyUploads(env,new Date(),u.searchParams.get('date')||'',env.team));
- if(path==='/api/reviews/refresh'&&request.method==='POST'){
-  await owner(request,true);
-  const where="team=? AND kind='video' AND state='complete' AND status='review' AND template_snapshot IS NOT NULL AND json_extract(report,'$.algorithm') LIKE 'clipguard-4-evidence-%' AND json_extract(report,'$.algorithm')!=? AND json_extract(report,'$.evidence.sampleCount') IS NOT NULL";
-  const {results}=await env.DB.prepare('SELECT * FROM shared_uploads WHERE '+where+' ORDER BY created_at DESC LIMIT 20').bind(env.team,RULE_VERSION).all();let updated=0;
-  for(const row of results){const old=JSON.parse(row.report),next=recheckStoredText(old,JSON.parse(row.template_snapshot));if(!next)continue;
-   const result=await env.DB.prepare('UPDATE shared_uploads SET status=?,score=?,report=?,updated_at=? WHERE id=? AND report=?').bind(next.status,next.score,JSON.stringify(next),new Date().toISOString(),row.id,row.report).run();updated+=result.meta.changes;
-  }
-  return json({updated,hasMore:results.length===20&&updated>0});
- }
+ if(path==='/api/reviews/refresh'&&request.method==='POST'){await owner(request,true);return json({updated:0,hasMore:false,preservedHistorical:true});}
+
  const evaluate=/^\/api\/uploads\/([^/]+)\/evaluate$/.exec(path);if(evaluate&&request.method==='POST'){
   const row=await uploadRow(env,evaluate[1]);await owned(request,row,env);if(!row.video_ready||row.state!=='processing')fail('视频尚未就绪或本次审核已结束',409);
   const data=await body(request),f=featureData(data.feature),head=await env.BUCKET.head('videos/'+row.id),stored=head?.customMetadata?.sha,source=head?.customMetadata?.sourceSha||stored;

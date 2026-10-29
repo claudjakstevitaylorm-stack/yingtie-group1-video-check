@@ -1,8 +1,9 @@
+import {assessDimensions,DECISION_POLICY} from './decision-policy.js';
 import {extractAudioQuality,validAudioQuality} from './audio-quality.js';
 import {prepareVideoBlob,waitForMedia,seekVideoFrame} from './media-reader.js';
 import {bgmSimilarity,validBgm,extractBgm} from './bgm.js';
 export const VERSION = 'clipguard-4';
-export const RULE_VERSION = 'clipguard-4-evidence-5-any';
+export const RULE_VERSION = 'clipguard-4-evidence-6-three-all-mean60';
 export const ANALYSIS_REVISION='20261029-visual-text-2';
 export function currentReference(f){return f?.version===VERSION&&f.analysisRevision===ANALYSIS_REVISION&&hasEvidence(f)&&!!f.frames?.length;}
 export const THRESHOLD = 70;
@@ -29,18 +30,17 @@ export function compare(feature,templates){
   const exact=feature.sha===t.sha,rawVisual=feature.version===t.version?visualSimilarity(feature.frames,t.frames):null,visualProof=visualReliable(feature)&&visualReliable(t);
   const visual=exact?100:visualProof&&rawVisual>0?rawVisual:null;
   const sub=compareText(screenPart(feature),screenPart(t)),overlay=compareText(screenPart(feature,true),screenPart(t,true));
-  const bothNoBgm=feature.bgm?.status==='none'&&t.bgm?.status==='none',absenceMusic=feature.bgm?.status==='none'||t.bgm?.status==='none';
-  const music=absenceMusic||!musicReliable(feature)||!musicReliable(t)?null:bgmSimilarity(feature.bgm,t.bgm);
-  const states={visual:visual===null?'review':'ok',subtitle:sub.state,overlay:overlay.state,bgm:bothNoBgm?'none':music===null?'review':'ok'};
-  const reasons={visual:exact?'原片文件指纹完全一致':!visualProof?'画面抽样证据不足，需更新参考或重新审核':rawVisual===0?'抽样画面未达到可靠匹配阈值，不能据此认定0%重复，不作为通过依据':'',subtitle:sub.reason,overlay:overlay.reason,bgm:bothNoBgm?'双方均无BGM，不计分':absenceMusic?'单方无BGM声明不等于0%重复，不作为通过依据':music===null?'未提供双方可靠纯BGM证据，不计分':''};
+  const music=null;
+  const states={visual:visual===null?'review':'ok',subtitle:sub.state,overlay:overlay.state,bgm:'none'};
+  const reasons={visual:exact?'原片文件指纹完全一致':!visualProof?'画面抽样证据不足，需更新参考或重新审核':rawVisual===0?'抽样画面未达到可靠匹配阈值，不能据此认定0%重复，不作为通过依据':'',subtitle:sub.reason,overlay:overlay.reason,bgm:'BGM已移出查重审核，口播不计分'};
   Object.assign(reasons,explainEvidence(feature,t,{visual,subtitle:sub.value,overlay:overlay.value,bgm:music,states,rawVisual,exact}));
+  reasons.bgm='BGM已移出查重审核，口播不计分';
   const dimensions={visual,subtitle:exact&&sub.state==='ok'?100:sub.value,overlay:exact&&overlay.state==='ok'?100:overlay.value,bgm:exact&&music!==null?100:music};
-  const valid=Object.entries(dimensions).filter(([,v])=>Number.isFinite(v)),qualifying=valid.filter(([,v])=>v<=THRESHOLD).map(([key])=>key),complete=Object.values(states).every(s=>s!=='review');
-  const status=exact?'fail':qualifying.length?'pass':complete&&valid.length?'fail':'review',highest=valid.length?Math.max(...valid.map(([,v])=>v)):null;
-  return{id:t.id,name:t.name,...dimensions,states,reasons,rawVisual,score:exact?100:highest,decisionScore:exact?100:valid.length?Math.min(...valid.map(([,v])=>v)):null,highestScore:highest,qualifying,complete,status,exact,legacy:t.version!==VERSION||!hasEvidence(t)};
- }).sort((a,b)=>(b.score??-1)-(a.score??-1));
+  const verdict=assessDimensions({...dimensions,states},{exact}),highest=Math.max(...Object.values(dimensions).filter(Number.isFinite));
+  return{id:t.id,name:t.name,...dimensions,states,reasons,rawVisual,...verdict,decisionScore:verdict.score,highestScore:Number.isFinite(highest)?highest:null,exact,legacy:t.version!==VERSION||!hasEvidence(t)};
+ }).sort((a,b)=>({fail:3,review:2,pass:1}[b.status]-{fail:3,review:2,pass:1}[a.status])||(b.score??-1)-(a.score??-1));
  const best=rows[0],status=!rows.length?'review':rows.some(r=>r.status==='fail')?'fail':rows.every(r=>r.status==='pass')?'pass':'review';
- return{score:best?.score??null,status,best,comparisons:rows,threshold:THRESHOLD,algorithm:RULE_VERSION,decision:'any-reliable-dimension-at-most',scoreMeaning:'highest-reliable-dimension-not-whole-video',qualifying:best?.qualifying||[]};
+ return{score:best?.score??null,status,best,comparisons:rows,threshold:THRESHOLD,algorithm:RULE_VERSION,decision:DECISION_POLICY,averageThreshold:60,auditedDimensions:['visual','subtitle','overlay'],scoreMeaning:'three-dimension-arithmetic-mean',qualifying:best?.qualifying||[]};
 }
 let aiWorker,requests=new Map(),nextId=0;
 function ensureWorker(){if(!aiWorker){aiWorker=new Worker(new URL('./recognizer.js',import.meta.url),{type:'module'});aiWorker.onmessage=({data:d})=>{const r=requests.get(d.id);if(!r)return;if(d.progress){r.heartbeat();r.progress(d.progress);return;}clearTimeout(r.timer);requests.delete(d.id);d.error?r.reject(new Error(d.error)):r.resolve(d.result);};aiWorker.onerror=()=>{for(const r of requests.values()){clearTimeout(r.timer);r.reject(new Error('识别引擎启动失败，请检查模型网络连接后重试'));}requests.clear();aiWorker?.terminate();aiWorker=null;};}return aiWorker;}
@@ -62,10 +62,7 @@ async function extractFile(file,progress=()=>{},options={}){
  }catch(e){errors.push('画面文字识别：'+e.message);}
  if(subtitleStatus==='review')errors.push(options.forTemplate?'参考字幕证据不足（缺失、短文本或识别不确定）':subtitles.trim()?'已识别字幕但词量或多样性不足，不作为低分通过依据':'未提取到可靠字幕，不作为低分通过依据');
  if(overlayStatus==='review')errors.push(options.forTemplate?'参考花字证据不足（缺失、短文本或识别不确定）':overlays.trim()?'已识别花字但词量或多样性不足，不作为低分通过依据':'未提取到可靠花字，不作为低分通过依据');
- let bgm={status:'review',source:'unconfirmed',frames:[]};
- if(options.bgmMode==='none')bgm={status:'none',source:'declared-none',frames:[]};
- else if(options.bgmFile)try{bgm=await extractBgm(options.bgmFile,duration,progress);}catch(e){errors.push('BGM：'+e.message);}
- if(!options.forTemplate&&bgm.status==='review'&&!errors.some(e=>e.startsWith('BGM：')))errors.push('BGM未确认：请提供与视频同起止的纯BGM片段，或确认没有BGM。口播音频不参与比对');
+ const bgm={status:'none',source:'not-audited',frames:[]};
  const audioQuality=options.forTemplate?undefined:await extractAudioQuality(file,duration,progress);
  progress('生成文件指纹…');const sha=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),b=>b.toString(16).padStart(2,'0')).join('');
  return{version:VERSION,analysisRevision:ANALYSIS_REVISION,interfaceText,name:file.name.slice(0,300),duration,size:file.size,sha,audioQuality,frames,evidence:{version:1,sampleCount:frames.length,sampleTimes,...textEvidence},thumbnail,subtitles,subtitleStatus,overlays,overlayStatus,bgm,errors,createdAt:new Date().toISOString()};
@@ -91,14 +88,5 @@ export function explainEvidence(video,template,row){
  return result;
 }
 
-// Re-evaluate only text from a saved review and its original template snapshot.
-// No visual frames or music fingerprints are invented or fetched here.
-export function recheckStoredText(report,template){
- if(!currentReference({...report,frames:report.frames||Array(report.evidence?.sampleCount||0)})||!currentReference(template)||report.status!=='review'||report.algorithm===RULE_VERSION||!/^clipguard-4-evidence-/.test(report.algorithm||'')||!hasEvidence(report)||!hasEvidence(template)||!report.best)return null;
- const prior=report.best,sub=compareText(screenPart(report),screenPart(template)),overlay=compareText(screenPart(report,true),screenPart(template,true));
- const dimensions={visual:Number.isFinite(prior.visual)&&prior.visual>0?prior.visual:null,subtitle:sub.value,overlay:overlay.value,bgm:Number.isFinite(prior.bgm)?prior.bgm:null};
- const states={...prior.states,subtitle:sub.state,overlay:overlay.state},valid=Object.values(dimensions).filter(Number.isFinite),qualifying=Object.keys(dimensions).filter(k=>Number.isFinite(dimensions[k])&&dimensions[k]<=THRESHOLD),complete=Object.values(states).every(s=>s!=='review');
- const best={...prior,...dimensions,states,qualifying,complete,score:valid.length?Math.max(...valid):null,highestScore:valid.length?Math.max(...valid):null,decisionScore:valid.length?Math.min(...valid):null,status:prior.exact?'fail':qualifying.length?'pass':complete&&valid.length?'fail':'review'};
- best.reasons={...prior.reasons,...explainEvidence(report,template,best)};
- return{...report,algorithm:RULE_VERSION,status:best.status,score:best.score,best,comparisons:[best],qualifying,automaticReview:{type:'stored-text-recheck',ruleVersion:RULE_VERSION,previous:{status:report.status,score:report.score,algorithm:report.algorithm,best:report.best}}};
-}
+// A policy change does not silently rewrite historical reports from stored text.
+export function recheckStoredText(){return null;}

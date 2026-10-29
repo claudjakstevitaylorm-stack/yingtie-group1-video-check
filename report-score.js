@@ -1,5 +1,6 @@
-export function reportScore(report){const row=report?.best;if(!row)return null;const values=['visual','subtitle','overlay','bgm'].filter(k=>row.states?.[k]!=='none').map(k=>row[k]).filter(v=>Number.isFinite(v)&&v>=0&&v<=100);return values.length?values.reduce((sum,v)=>sum+v,0)/values.length:null;}
-export function scoreBasis(report){const labels={visual:'画面',subtitle:'字幕',overlay:'花字',bgm:'BGM'},row=report?.best;if(!row)return '';const included=Object.keys(labels).filter(k=>row.states?.[k]!=='none'&&Number.isFinite(row[k])&&row[k]>=0&&row[k]<=100);if(!included.length)return '暂无可计分项目，平均查重率待确认。';const excluded=Object.keys(labels).filter(k=>!included.includes(k));return '平均分仅按'+included.map(k=>labels[k]).join('、')+'计算（'+included.length+'/4项）'+(excluded.length?'；'+excluded.map(k=>labels[k]).join('、')+'未计入。':'。');}
+import {assessDimensions,usesThreeDimensions,DIMENSIONS} from './decision-policy.js';
+export function reportScore(report){const row=report?.best;if(!row)return null;if(usesThreeDimensions(report))return assessDimensions(row).averageScore;const values=['visual','subtitle','overlay','bgm'].filter(k=>row.states?.[k]!=='none').map(k=>row[k]).filter(v=>Number.isFinite(v)&&v>=0&&v<=100);return values.length?values.reduce((sum,v)=>sum+v,0)/values.length:null;}
+export function scoreBasis(report){const labels={visual:'画面',subtitle:'字幕',overlay:'花字',bgm:'BGM'},row=report?.best;if(!row)return '';if(usesThreeDimensions(report)){const verdict=assessDimensions(row);return verdict.complete?'总分＝（画面＋字幕＋花字）÷3；每项≤70%，且总分≤60%通过。':'三项尚未全部计分，暂不计算总分；未计分项不按0%处理。';}const included=Object.keys(labels).filter(k=>row.states?.[k]!=='none'&&Number.isFinite(row[k])&&row[k]>=0&&row[k]<=100);if(!included.length)return '暂无可计分项目，平均查重率待确认。';const excluded=Object.keys(labels).filter(k=>!included.includes(k));return '平均分仅按'+included.map(k=>labels[k]).join('、')+'计算（'+included.length+'/4项）'+(excluded.length?'；'+excluded.map(k=>labels[k]).join('、')+'未计入。':'。');}
 export function scoreLabel(value){return value===null||value===undefined?'证据不足':value===0?'未检出匹配':value.toFixed(1)+'%';}
 
 export function reviewOpinion(r){
@@ -7,6 +8,7 @@ export function reviewOpinion(r){
  if(r.state==='processing')return '视频正在排队或审核中，完成后显示结果。';
  if(r.state==='failed')return '视频上传或处理失败，请重新提交。';
  if(r.status==='pass')return '查重通过。';
+ if(r.status==='fail'&&usesThreeDimensions(r)&&!r.best?.exact){const v=assessDimensions(r.best||{}),labels={visual:'画面',subtitle:'字幕',overlay:'花字'},parts=v.exceeded.map(k=>labels[k]+'重复度'+r.best[k].toFixed(1)+'%，超过70%');if(v.averageExceeded)parts.push('三项平均'+v.averageScore.toFixed(1)+'%，超过60%');return parts.length?parts.join('；')+'。':'重复度超过审核标准，请调整后重新提交。';}
  if(r.status==='fail')return r.best?.exact?'与所选模板是同一个视频，请更换素材后重新提交。':'与所选模板重复程度过高，请调整重复内容后重新审核。';
  const errors=(r.errors||[]).join(' ');
  if(/超时/.test(errors))return '视频读取或识别超时，请保持页面打开后重新审核。';
@@ -37,10 +39,10 @@ export function dimensionReason(report,key){
 }
 
 export function pendingReviewReason(r){
- const labels={visual:'画面',subtitle:'字幕',overlay:'花字',bgm:'BGM'},parts=[];
+ const labels=usesThreeDimensions(r)?{visual:'画面',subtitle:'字幕',overlay:'花字'}:{visual:'画面',subtitle:'字幕',overlay:'花字',bgm:'BGM'},parts=[];
  for(const key of Object.keys(labels)){
-  if(Number.isFinite(r.best?.[key])||r.best?.states?.[key]==='none')continue;
-  let text=dimensionReason(r,key).replace(/，暂不计分。/g,'').replace(/。$/,'').replace(/\n/g,'；');
+  if(Number.isFinite(r.best?.[key])||!usesThreeDimensions(r)&&r.best?.states?.[key]==='none')continue;
+  let text=(usesThreeDimensions(r)&&r.best?.states?.[key]==='none'?'双方没有可比内容，未计分。':dimensionReason(r,key)).replace(/，暂不计分。/g,'').replace(/。$/,'').replace(/\n/g,'；');
   if(key==='bgm'&&parts.length)text='';
   if(text)parts.push(labels[key]+'：'+text);
  }

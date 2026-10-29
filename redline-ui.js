@@ -23,7 +23,7 @@ export function reviewOutcome(record){
  if(record.state==='processing')return{label:'审核中',tone:'review',opinion:''};
  if(record.state==='failed')return{label:'上传失败',tone:'fail',opinion:'视频未处理成功，请重新提交'};
  const red=redlineResult(record);
- if(record.status==='fail'||red.tone==='fail')return{label:'不通过',tone:'fail',opinion:[record.status==='fail'?'查重未通过':'',red.tone==='fail'?red.opinion:''].filter(Boolean).join('；')};
+ if(record.status==='fail'||red.tone==='fail')return{label:'不通过',tone:'fail',opinion:[record.status==='fail'?reviewOpinion(record):'',red.tone==='fail'?red.opinion:''].filter(Boolean).join('；')};
  if(record.status==='pass'&&red.tone==='pass')return{label:'通过',tone:'pass',opinion:''};
  return{label:'待复核',tone:'review',opinion:record.status==='review'?reviewOpinion(record):red.opinion};
 }
