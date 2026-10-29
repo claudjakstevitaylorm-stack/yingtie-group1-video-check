@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node scripts/build-shared.mjs",
     "db:generate": "drizzle-kit generate",
-    "test": "node --test tests/audit-media.test.mjs tests/daily-uploads.test.mjs tests/content-checks.test.mjs tests/engine.test.mjs tests/shared-api.test.mjs tests/upload-pipeline.test.mjs tests/retry-review.test.mjs tests/template-picker.test.mjs tests/redlines.test.mjs tests/media-reader.test.mjs tests/video-compression.test.mjs tests/audit-recovery.test.mjs tests/local-workspace.test.mjs",
+    "test": "node --test tests/groups.test.mjs tests/audit-media.test.mjs tests/daily-uploads.test.mjs tests/content-checks.test.mjs tests/engine.test.mjs tests/shared-api.test.mjs tests/upload-pipeline.test.mjs tests/retry-review.test.mjs tests/template-picker.test.mjs tests/redlines.test.mjs tests/media-reader.test.mjs tests/video-compression.test.mjs tests/audit-recovery.test.mjs tests/local-workspace.test.mjs",
     "dev": "node scripts/build-shared.mjs && node scripts/preview-shared.mjs",
     "check": "node scripts/validate-artifact.mjs"
   },

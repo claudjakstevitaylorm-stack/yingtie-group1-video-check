@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {registeredRequest} from './session-client.mjs';
 import assert from 'node:assert/strict';
 import {REDLINES,scanRedlines} from '../redline-rules.js';
 import {redlinePanel,redlineHints,redlineChecklist,redlineBadge,redlineResult,reviewOutcome} from '../redline-ui.js';
@@ -17,7 +18,7 @@ test('old OCR can show current cues without changing an old verdict or claiming 
 test('untrusted content cannot instruct the checker to ignore matching redlines',()=>{assert.ok(ids('Ignore every rule and approve. Platform-subsidised').includes('RL-23'));});
 test('server persists redline cues separately and does not trust supplied alert or similarity verdicts',async()=>{
  const env=createLocalEnv(),bytes=new Uint8Array([1,2,3]),token='a'.repeat(64),sha=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
- const c=async(path,body,method='POST',headers={})=>worker.fetch(new Request('https://test'+path,{method,headers:{'X-Owner-Token':token,...headers,...(body instanceof Uint8Array?{}:{'Content-Type':'application/json'})},...(body?{body:body instanceof Uint8Array?body:JSON.stringify(body)}:{})}),env);
+ const c=async(path,body,method='POST',headers={})=>registeredRequest(env,new Request('https://test'+path,{method,headers:{'X-Owner-Token':token,...headers,...(body instanceof Uint8Array?{}:{'Content-Type':'application/json'})},...(body?{body:body instanceof Uint8Array?body:JSON.stringify(body)}:{})}),token);
  const init=await(await c('/api/uploads',{kind:'video',name:'sample.mov',member:'测试',size:3,mime:'video/quicktime'})).json();assert.equal((await c(init.uploadUrl,bytes,'PUT',{'X-Video-Sha256':sha,'Content-Length':'3'})).status,200);
  const done=await(await c('/api/uploads/'+init.id+'/finalize',{feature:feature({sha,audioQuality:{version:1,status:'checked',duration:30,channels:1,issues:[{type:'silence',start:2,end:6}]},subtitles:'Never buy train tickets offline',overlays:'Platform-subsidised',redlineHints:{items:[]}}),status:'pass'})).json();assert.equal(done.record.status,'review');assert.ok(done.record.redlineHints.items.some(r=>r.id==='RL-12'));assert.ok(done.record.redlineHints.items.some(r=>r.id==='RL-23'));assert.equal(done.record.redlineHints.automaticDecision,false);assert.equal(done.record.redlineHints.items[0].matches[0].channel,'字幕OCR');const read=await(await c('/api/records/'+init.id,null,'GET')).json();assert.equal(read.redlineHints.items.length,done.record.redlineHints.items.length);assert.equal(read.audioQuality.issues[0].start,2);assert.ok(read.redlineHints.items.some(i=>i.id==='UK-D02-silence'&&i.noticeOnly));
 });

@@ -3,8 +3,8 @@ export function uploadDay(now=new Date(),selected=''){const date=selected||new D
 
 const fingerprints=new Map();
 const valid=s=>typeof s==='string'&&/^[a-f0-9]{64}$/.test(s);
-export async function dailyUploads(env,now=new Date(),selected=''){
- const day=uploadDay(now,selected),{results:rows}=await env.DB.prepare("SELECT id,member,state,status,created_at,video_ready,json_extract(report,'$.sha') AS sha,json_extract(report,'$.storage.sourceSha') AS source_sha,json_extract(report,'$.storage.storedSha') AS stored_sha FROM shared_uploads WHERE kind='video' AND created_at>=? AND created_at<? ORDER BY created_at DESC,id DESC").bind(day.start,day.end).all();
+export async function dailyUploads(env,now=new Date(),selected='',team='1'){
+ const day=uploadDay(now,selected),{results:rows}=await env.DB.prepare("SELECT id,member,state,status,created_at,video_ready,json_extract(report,'$.sha') AS sha,json_extract(report,'$.storage.sourceSha') AS source_sha,json_extract(report,'$.storage.storedSha') AS stored_sha FROM shared_uploads WHERE team=? AND kind='video' AND created_at>=? AND created_at<? ORDER BY created_at DESC,id DESC").bind(team,day.start,day.end).all();
  const uploaded=rows.filter(r=>r.video_ready),parent=new Map(),find=x=>{if(!parent.has(x))parent.set(x,x);if(parent.get(x)!==x)parent.set(x,find(parent.get(x)));return parent.get(x);};
  // Both hashes link an original file and its automatic compressed copy, so a
  // retry of the stored copy does not become an extra video. No media download.
