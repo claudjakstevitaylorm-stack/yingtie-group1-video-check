@@ -1,4 +1,5 @@
 export function reportScore(report){const row=report?.best;if(!row)return null;const values=['visual','subtitle','overlay','bgm'].filter(k=>row.states?.[k]!=='none').map(k=>row[k]).filter(v=>Number.isFinite(v)&&v>=0&&v<=100);return values.length?values.reduce((sum,v)=>sum+v,0)/values.length:null;}
+export function scoreBasis(report){const labels={visual:'画面',subtitle:'字幕',overlay:'花字',bgm:'BGM'},row=report?.best;if(!row)return '';const included=Object.keys(labels).filter(k=>row.states?.[k]!=='none'&&Number.isFinite(row[k])&&row[k]>=0&&row[k]<=100);if(!included.length)return '暂无可计分项目，平均查重率待确认。';const excluded=Object.keys(labels).filter(k=>!included.includes(k));return '平均分仅按'+included.map(k=>labels[k]).join('、')+'计算（'+included.length+'/4项）'+(excluded.length?'；'+excluded.map(k=>labels[k]).join('、')+'未计入。':'。');}
 export function scoreLabel(value){return value===null||value===undefined?'证据不足':value===0?'未检出匹配':value.toFixed(1)+'%';}
 
 export function reviewOpinion(r){
@@ -18,8 +19,8 @@ export function dimensionReason(report,key){
  if(Number.isFinite(report.best?.[key])||report.best?.states?.[key]==='none')return '';
  const reason=report.best?.reasons?.[key]||report.evidenceExplanation?.[key];
  if(!reason)return report.state==='uploading'?'上传完成后进行比对。':report.state==='processing'?'正在识别，完成后显示分数。':'这份报告未保存该项的具体原因，需要重新审核。';
- if(key==='bgm')return '缺少可比的纯BGM，口播不计分。';
- if(key==='visual')return report.best?.rawVisual===0||/没有找到.*匹配|未达到可靠匹配/.test(reason)?'未找到可靠的画面匹配，暂不计分。':'视频或模板的画面样本不足，暂不计分。';
+ if(key==='bgm')return '未取得可比的纯音乐音轨，无法比较BGM；不代表视频没有音乐。';
+ if(key==='visual')return report.best?.rawVisual===0||/没有找到.*匹配|未达到可靠匹配/.test(reason)?'已比对画面，但未确认相似片段；不按0%处理，未计入平均。':'视频或模板未取得足够画面，无法比较；未计入平均。';
  const summaries=reason.split('\n').filter(line=>line&&!line.startsWith('处理：')&&!line.includes('这些数量条件已满足。')).map(line=>{
   const side=line.startsWith('模板')?'模板：':line.startsWith('上传视频')?'上传视频：':'',parts=[];
   const count=line.match(/：(\d+)词/),coverage=line.match(/文字仅出现在(\d+)\/(\d+)张/),ratio=line.match(/有效英文词占(\d+)%/);
