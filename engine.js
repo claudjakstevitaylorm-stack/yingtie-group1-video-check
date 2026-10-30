@@ -3,13 +3,13 @@ import {extractAudioQuality,validAudioQuality} from './audio-quality.js';
 import {prepareVideoBlob,waitForMedia,seekVideoFrame} from './media-reader.js';
 import {bgmSimilarity,validBgm,extractBgm} from './bgm.js';
 export const VERSION = 'clipguard-4';
-export const RULE_VERSION = 'clipguard-4-evidence-7-three-all-mean60';
+export const RULE_VERSION = 'clipguard-4-evidence-8-three-all-mean60';
 export const ANALYSIS_REVISION='20261030-spatial-ocr-3';
 export function currentReference(f){return f?.version===VERSION&&f.analysisRevision===ANALYSIS_REVISION&&hasEvidence(f)&&!!f.frames?.length;}
 export const THRESHOLD = 70;
 import {words,textSimilarity} from './text-match.js';
 import {comparisonText} from './screen-text.js';
-import {fingerprint,createFrameFingerprint,frameMatch,localFrameMatch,visualSimilarity} from './visual-match.js';
+import {fingerprint,createFrameFingerprint,frameMatch,localFrameMatch,visualSimilarity,usableVisualFrame,unmatchedVisualEstimate} from './visual-match.js';
 export {words,textSimilarity,fingerprint,frameMatch,localFrameMatch,visualSimilarity};
 export function textQuality(text){const all=words(text),candidates=all.filter(t=>/[a-z]/.test(t)),meaningful=candidates.filter(t=>/^[a-z']{2,}$/.test(t));return{all,meaningful,unique:new Set(meaningful).size,ratio:candidates.length?meaningful.length/candidates.length:0};}
 export function reliableText(text){const q=textQuality(text);return q.meaningful.length>=12&&q.ratio>=.85&&q.unique>=8;}
@@ -21,6 +21,7 @@ function textReliable(f,overlay){if(!hasEvidence(f))return false;const list=f.ev
 }
 function musicReliable(f){const b=f.bgm;return validBgm(b)&&b.status==='ok'&&Math.abs(b.duration-f.duration)<=1&&b.frames.length>=Math.max(11,Math.ceil((b.duration*4-.256)*.8))&&b.frames.filter(frame=>frame.some(v=>v>0)).length>=Math.ceil(b.frames.length*.8);}
 function visualReliable(f){if(!hasEvidence(f)||f.frames.length<Math.min(12,Math.ceil(f.duration*2)))return false;const rich=f.frames.filter(frame=>frame.tiles?.filter(t=>t.detail>=12).length>=4);return rich.length>=Math.ceil(f.frames.length*.6);}
+function fullVisualEvidence(f){if(!hasEvidence(f)||!visualReliable(f))return false;const n=f.frames.length,wanted=Math.min(180,Math.ceil(f.duration*3)),times=f.evidence.sampleTimes,step=f.duration/n;if(n<Math.ceil(wanted*.9)||times[0]>Math.max(.5,step)||times.at(-1)<f.duration-Math.max(.5,step*1.5)||times.some((time,i)=>i>0&&time-times[i-1]>Math.max(.5,step*2)))return false;return f.frames.filter(usableVisualFrame).length>=Math.ceil(n*.8);}
 export function validFeature(f){return f&&validAudioQuality(f.audioQuality,f.duration)&&(f.evidence===undefined||hasEvidence(f))&&f.version===VERSION&&typeof f.sha==='string'&&/^[a-f0-9]{64}$/.test(f.sha)&&typeof f.name==='string'&&f.name.length<=300&&Number.isFinite(f.duration)&&f.duration>0&&Array.isArray(f.frames)&&f.frames.length>0&&f.frames.length<=180&&f.frames.every(x=>x&&/^[01]{63}$/.test(x.hash)&&Array.isArray(x.color)&&x.color.length===12&&x.color.every(v=>Number.isFinite(v)&&v>=0&&v<=1))&&f.frames.every(x=>x.tiles===undefined||(Array.isArray(x.tiles)&&x.tiles.length===9&&x.tiles.every(t=>t&&/^[01]{63}$/.test(t.hash)&&Array.isArray(t.color)&&t.color.length===12&&t.color.every(v=>Number.isFinite(v)&&v>=0&&v<=1)&&Number.isFinite(t.detail)&&t.detail>=0&&t.detail<=128)))&&(f.analysisRevision===undefined||typeof f.analysisRevision==='string'&&f.analysisRevision.length<=80)&&(f.interfaceText===undefined||typeof f.interfaceText==='string'&&f.interfaceText.length<30000)&&f.frames.every(x=>(x.points===undefined||typeof x.points==='string'&&x.points.length<=1152&&x.points.length%36===0&&/^[0-9a-f]*$/.test(x.points))&&(x.whiteRatio===undefined||Number.isFinite(x.whiteRatio)&&x.whiteRatio>=0&&x.whiteRatio<=1))&&f.frames.every(x=>[x,...x.tiles||[],...x.regions||[]].every(t=>t.luma===undefined||typeof t.luma==='string'&&/^[0-9a-f]{64}$/.test(t.luma)))&&f.frames.every(x=>x.regions===undefined||Array.isArray(x.regions)&&x.regions.length<=3&&x.regions.every(t=>t&&/^[01]{63}$/.test(t.hash)&&Array.isArray(t.color)&&t.color.length===12&&t.color.every(v=>Number.isFinite(v)&&v>=0&&v<=1)&&Number.isFinite(t.detail)&&t.detail>=0&&t.detail<=128))&&typeof f.overlays==='string'&&f.overlays.length<30000&&['ok','none','review'].includes(f.overlayStatus)&&typeof f.subtitles==='string'&&f.subtitles.length<30000&&['ok','none','review'].includes(f.subtitleStatus)&&validBgm(f.bgm)&&Array.isArray(f.errors)&&f.errors.length<20&&f.errors.every(e=>typeof e==='string'&&e.length<1000)&&typeof f.thumbnail==='string'&&(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(f.thumbnail))&&f.thumbnail.length<150000;}
 function screenPart(f,overlay=false){const status=overlay?f.overlayStatus:f.subtitleStatus,reliable=textReliable(f,overlay);return{status:f.version!==VERSION?'review':status==='none'?'none':reliable?'ok':'review',text:comparisonText(overlay?f.overlays:f.subtitles),reliable};}
 function compareText(a,b){
@@ -32,16 +33,18 @@ function compareText(a,b){
 export function compare(feature,templates){
  const rows=templates.filter(t=>t.enabled!==false).map(t=>{
   const exact=feature.sha===t.sha,rawVisual=feature.version===t.version?visualSimilarity(feature.frames,t.frames):null,visualProof=visualReliable(feature)&&visualReliable(t);
-  const visual=exact?100:visualProof&&rawVisual>0?rawVisual:null;
+  const visualEvidence=!exact&&rawVisual===0&&fullVisualEvidence(feature)&&fullVisualEvidence(t)?unmatchedVisualEstimate(feature.frames,t.frames):null;
+  const visual=exact?100:visualProof&&rawVisual>0?rawVisual:visualEvidence?.score??null;
   const sub=compareText(screenPart(feature),screenPart(t)),overlay=compareText(screenPart(feature,true),screenPart(t,true));
   const music=null;
   const states={visual:visual===null?'review':'ok',subtitle:sub.state,overlay:overlay.state,bgm:'none'};
   const reasons={visual:exact?'原片文件指纹完全一致':!visualProof?'画面抽样证据不足，需更新参考或重新审核':rawVisual===0?'抽样画面未达到可靠匹配阈值，不能据此认定0%重复，不作为通过依据':'',subtitle:sub.reason,overlay:overlay.reason,bgm:'BGM已移出查重审核，口播不计分'};
   Object.assign(reasons,explainEvidence(feature,t,{visual,subtitle:sub.value,overlay:overlay.value,bgm:music,states,rawVisual,exact}));
+  if(visualEvidence)reasons.visual=visual===0?'整段画面已完成抽样比对，未检出重复片段；0%是本次抽样结果，不代表绝对没有重复。':'整段画面已完成抽样比对，疑似相似和不清晰画面已计入保守估计：'+visual.toFixed(1)+'%。';
   reasons.bgm='BGM已移出查重审核，口播不计分';
   const dimensions={visual,subtitle:exact&&sub.state==='ok'?100:sub.value,overlay:exact&&overlay.state==='ok'?100:overlay.value,bgm:exact&&music!==null?100:music};
   const verdict=assessDimensions({...dimensions,states},{exact}),highest=Math.max(...Object.values(dimensions).filter(Number.isFinite));
-  return{id:t.id,name:t.name,...dimensions,states,reasons,rawVisual,...verdict,decisionScore:verdict.score,highestScore:Number.isFinite(highest)?highest:null,exact,legacy:t.version!==VERSION||!hasEvidence(t)};
+  return{id:t.id,name:t.name,...dimensions,states,reasons,rawVisual,...(visualEvidence?{visualEvidence}:{}),...verdict,decisionScore:verdict.score,highestScore:Number.isFinite(highest)?highest:null,exact,legacy:t.version!==VERSION||!hasEvidence(t)};
  }).sort((a,b)=>({fail:3,review:2,pass:1}[b.status]-{fail:3,review:2,pass:1}[a.status])||(b.score??-1)-(a.score??-1));
  const best=rows[0],status=!rows.length?'review':rows.some(r=>r.status==='fail')?'fail':rows.every(r=>r.status==='pass')?'pass':'review';
  return{score:best?.score??null,status,best,comparisons:rows,threshold:THRESHOLD,algorithm:RULE_VERSION,decision:DECISION_POLICY,averageThreshold:60,auditedDimensions:['visual','subtitle','overlay'],scoreMeaning:'three-dimension-arithmetic-mean',qualifying:best?.qualifying||[]};
@@ -86,7 +89,7 @@ export function explainEvidence(video,template,row){
  if(!Number.isFinite(row.visual)){
  const sample=f=>f.frames?.length??f.evidence?.sampleCount;
  const count=f=>Number.isInteger(sample(f))?sample(f)+'张':'未保存';
- if(row.rawVisual===0)result.visual='已比较上传视频的'+count(video)+'抽样画面与模板的'+count(template)+'抽样画面，没有找到符合当前算法条件的匹配画面。可能是内容不同，也可能是裁剪、遮挡、缩放等使算法未匹配到，不能直接当成0%重复，不作为通过依据。\n处理：先确认选对了模板；若肉眼看起来相同，应改进画面识别，反复点审核未必能解决。';
+ if(!Number.isFinite(row.visual)&&row.rawVisual===0)result.visual='已比较上传视频的'+count(video)+'抽样画面与模板的'+count(template)+'抽样画面，没有找到符合当前算法条件的匹配画面。可能是内容不同，也可能是裁剪、遮挡、缩放等使算法未匹配到，不能直接当成0%重复，不作为通过依据。\n处理：先确认选对了模板；若肉眼看起来相同，应改进画面识别，反复点审核未必能解决。';
  else{const describe=(f,label)=>{if(f.explanationUnavailable)return '模板：这份报告未返回检测时的画面抽样明细。';const n=sample(f),required=Math.min(12,Math.ceil(f.duration*2));const rich=f.frames?.filter(x=>x.tiles?.filter(t=>t.detail>=12).length>=4).length;return label+'：抽样'+count(f)+'（至少需'+required+'张）'+(Number.isInteger(rich)?'，其中'+rich+'张有足够画面细节（至少需'+Math.ceil(n*.6)+'张）':'，旧报告未保存逐张画面细节')+'。';};result.visual=describe(video,'上传视频')+'\n'+describe(template,'模板')+'\n处理：重新审核会自动准备缺失的模板数据并重新读取视频。';}}
  if(!Number.isFinite(row.bgm)&&row.states?.bgm==='none')result.bgm='上传视频和模板均标记为无BGM，本项不参与比较，不是识别失败。';
  else if(!Number.isFinite(row.bgm)){const describe=(f,label)=>label+'：'+(f.explanationUnavailable?'这份报告未返回检测时的BGM明细':f.bgm?.status==='none'?'标记为无BGM':f.bgm?.status!=='ok'?'未提供或未成功提取纯BGM':musicReliable(f)?'纯BGM数据完整':!Array.isArray(f.bgm?.frames)?'旧报告未保留音乐指纹明细':Math.abs(f.bgm.duration-f.duration)>1?'BGM长'+f.bgm.duration.toFixed(1)+'秒，视频长'+f.duration.toFixed(1)+'秒，时长不对应':'纯BGM指纹数量或有效声音覆盖不足');result.bgm=describe(video,'上传视频')+'；'+describe(template,'模板')+'。双方没有可用的音乐比对数据，本项不计分。处理：确实要比BGM时提供与视频同起止的纯BGM；口播不参与，也不会因为BGM缺失单独判不通过。';}

@@ -1,0 +1,3 @@
+import{createFrameFingerprint}from'../visual-match.js';import{feature,alpha,colors}from'./evidence-fixture.mjs';
+function scene(seed){const p=new Uint8ClampedArray(96*96*4);for(let y=0;y<96;y++)for(let x=0;x<96;x++){const i=(y*96+x)*4;p[i+3]=255;for(let c=0;c<3;c++)p[i+c]=125+50*Math.sin(x/96*(11+seed*7+c*3)+y/96*(4+seed*5))+45*Math.cos(y/96*(17+seed*3+c*8)-x/96*(8+seed));}return createFrameFingerprint(p);}
+const a=scene(1),b=scene(8);export const upload=()=>feature({duration:8,frames:Array(24).fill(a),subtitles:alpha,overlays:alpha});export const reference=()=>feature({id:'reference',enabled:true,sha:'b'.repeat(64),duration:8,frames:Array(24).fill(b),subtitles:colors,overlays:colors});

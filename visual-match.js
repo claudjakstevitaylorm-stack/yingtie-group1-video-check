@@ -23,3 +23,14 @@ export function visualSimilarity(a,b){if(!a?.length||!b?.length)return null;
  const assign=(i,seen)=>{for(const j of edges[i])if(!seen[j]){seen[j]=true;if(owners[j]<0||assign(owners[j],seen)){owners[j]=i;return true;}}return false;};let count=0;for(const i of [...x.keys()].sort((i,j)=>edges[i].length-edges[j].length))if(assign(i,Array(n).fill(false)))count++;
  return count<Math.min(3,n)?0:100*count/n;
 }
+
+// A complete decode with no strict matches is different from a failed decode.
+// Include doubtful/near frames in a conservative sampling estimate, rather than
+// presenting every unmatched comparison as either a read error or a certain 0%.
+export function usableVisualFrame(f){return !!f&&f.detail>=12&&/^[0-9a-f]{64}$/.test(f.luma||'')&&f.tiles?.filter(t=>t.detail>=12).length>=4&&f.regions?.length===3&&f.regions.every(r=>/^[0-9a-f]{64}$/.test(r.luma||''));}
+function nearVisualFrame(a,b){if(!usableVisualFrame(a)||!usableVisualFrame(b))return false;for(const x of [a,...a.regions])for(const y of [b,...b.regions]){const color=colorDistance(x,y);if(color.earth>.22)continue;let bits=0;for(let k=0;k<63;k++)if(x.hash[k]!==y.hash[k])bits++;const normal=structure(x,y);if(bits<=15&&normal&&normal.correlation>=.5&&normal.distance<=2.8)return true;for(const mirror of [false,true]){const shape=mirror?structure(x,y,true):normal;if(shape&&shape.active>=16&&shape.correlation>=.82&&shape.distance<=1.9)return true;}}return false;}
+export function unmatchedVisualEstimate(a,b){if(!a?.length||!b?.length)return null;const n=Math.min(90,Math.max(a.length,b.length)),sample=fs=>Array.from({length:n},(_,i)=>fs[Math.round(i*(fs.length-1)/Math.max(1,n-1))]),left=sample(a),right=sample(b),possibleLeft=new Set(),possibleRight=new Set();left.forEach((f,i)=>{if(!usableVisualFrame(f))possibleLeft.add(i);});right.forEach((f,i)=>{if(!usableVisualFrame(f))possibleRight.add(i);});for(let i=0;i<n;i++)for(let j=0;j<n;j++)if(nearVisualFrame(left[i],right[j])){possibleLeft.add(i);possibleRight.add(j);}const possible=Math.max(possibleLeft.size,possibleRight.size),score=100*possible/n;
+ // This is a confidence gate, not a new acceptance threshold. Broad ambiguous
+ // matches still need review; they must not become a fabricated low percentage.
+ return score<=20?{score,kind:'full-coverage-conservative',sampleCount:n,possibleFrames:possible,zeroMeaning:'no-duplicate-detected-in-complete-sample'}:null;
+}

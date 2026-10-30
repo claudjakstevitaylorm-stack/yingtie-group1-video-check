@@ -11,3 +11,5 @@ export async function loadRetryVideo(item,url,fetchVideo=fetch){
  const blob=await response.blob();if(!blob.size)throw new Error('已上传原视频为空，无法重新审核');
  item.file=new File([blob],item.file.name,{type:item.file.type||blob.type||'video/mp4'});item.retryDownloaded=true;
 }
+
+export function activeReview(queue,id){return queue.some(q=>!q.done&&(q.sharedId===id||q.id===id||q.retrySourceId===id));}

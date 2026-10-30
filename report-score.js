@@ -18,6 +18,7 @@ export function reviewOpinion(r){
 }
 
 export function dimensionReason(report,key){
+ if(key==='visual'&&report.best?.visualEvidence?.kind==='full-coverage-conservative'&&Number.isFinite(report.best.visual))return report.best.visual===0?'整段抽样比对未检出重复片段。':'疑似相似片段已计入保守估计。';
  if(Number.isFinite(report.best?.[key])||report.best?.states?.[key]==='none')return '';
  const reason=report.best?.reasons?.[key]||report.evidenceExplanation?.[key];
  if(!reason)return report.state==='uploading'?'上传完成后进行比对。':report.state==='processing'?'正在识别，完成后显示分数。':'这份报告未保存该项的具体原因，需要重新审核。';

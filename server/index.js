@@ -77,7 +77,18 @@ export async function api(request,env){
  if(path==='/api/templates'&&request.method==='GET'){const hash=await owner(request);return json(u.searchParams.get('summary')==='1'?await templateSummaries(env,hash):{templates:await templateList(env,hash),categories:ALL_CATEGORIES});}
  const singleTemplate=/^\/api\/templates\/([^/]+)$/.exec(path);if(singleTemplate&&request.method==='GET'){if(!ID.test(singleTemplate[1]))fail('模板编号不正确');const list=await templateList(env,await owner(request)),template=list.find(t=>t.id===singleTemplate[1]);if(!template)fail('模板不存在',404);return json({template});}
  if(path==='/api/stats'&&request.method==='GET')return json(await dailyUploads(env,new Date(),u.searchParams.get('date')||'',env.team));
- if(path==='/api/reviews/refresh'&&request.method==='POST'){await owner(request,true);return json({updated:0,hasMore:false,preservedHistorical:true});}
+ if(path==='/api/reviews/refresh'&&request.method==='POST'){
+  await owner(request,true);const input=await body(request),base="team=? AND kind='video' AND state='complete' AND status='review' AND json_extract(report,'$.algorithm')=? AND json_extract(report,'$.analysisRevision')=?",args=[env.team,'clipguard-4-evidence-7-three-all-mean60',ANALYSIS_REVISION];
+  if(!input.feature){const {results}=await env.DB.prepare('SELECT report FROM shared_uploads WHERE '+base+' LIMIT 200').bind(...args).all(),hashes=[...new Set(results.flatMap(row=>{const r=JSON.parse(row.report);return[r.sha,r.storage?.storedSha];}).filter(s=>SHA.test(s||'')))];return json({updated:0,hasMore:false,hashes,preservedHistorical:true});}
+  const cached=featureData(input.feature),candidate=base+" AND (json_extract(report,'$.sha')=? OR json_extract(report,'$.storage.storedSha')=?)",bindings=[...args,cached.sha,cached.sha],{results}=await env.DB.prepare('SELECT * FROM shared_uploads WHERE '+candidate+' ORDER BY created_at DESC LIMIT 2').bind(...bindings).all();let updated=0,resolved=0;
+  for(const row of results){const previous=JSON.parse(row.report),reference=row.template_snapshot?JSON.parse(row.template_snapshot):null;if(!reference||!validFeature(reference))continue;
+   // Bind cached evidence to this saved file and its original reference snapshot.
+   const feature={...cached,sha:previous.sha,name:row.name},assessment=compare(feature,[reference]),automaticReview={ruleVersion:RULE_VERSION,at:new Date().toISOString(),source:'cached-evidence',previousResult:{algorithm:previous.algorithm,status:previous.status,score:previous.score,best:previous.best,comparisons:previous.comparisons}};
+   const report={...previous,...assessment,automaticReview};
+   const changed=await env.DB.prepare("UPDATE shared_uploads SET status=?,score=?,report=?,updated_at=? WHERE id=? AND team=? AND state='complete' AND status='review' AND report=?").bind(assessment.status,assessment.score,JSON.stringify(report),automaticReview.at,row.id,env.team,row.report).run();updated+=changed.meta?.changes||0;if(changed.meta?.changes&&assessment.status!=='review')resolved++;
+  }
+  const more=updated?await env.DB.prepare('SELECT id FROM shared_uploads WHERE '+candidate+' LIMIT 1').bind(...bindings).first():null;return json({updated,resolved,hasMore:!!more,preservedHistorical:true});
+ }
 
  const evaluate=/^\/api\/uploads\/([^/]+)\/evaluate$/.exec(path);if(evaluate&&request.method==='POST'){
   const row=await uploadRow(env,evaluate[1]);await owned(request,row,env);if(!row.video_ready||row.state!=='processing')fail('视频尚未就绪或本次审核已结束',409);
