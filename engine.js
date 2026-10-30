@@ -3,7 +3,7 @@ import {extractAudioQuality,validAudioQuality} from './audio-quality.js';
 import {prepareVideoBlob,waitForMedia,seekVideoFrame} from './media-reader.js';
 import {bgmSimilarity,validBgm,extractBgm} from './bgm.js';
 export const VERSION = 'clipguard-4';
-export const RULE_VERSION = 'clipguard-4-evidence-8-three-all-mean60';
+export const RULE_VERSION = 'clipguard-4-evidence-9-three-all-mean60';
 export const ANALYSIS_REVISION='20261030-spatial-ocr-3';
 export function currentReference(f){return f?.version===VERSION&&f.analysisRevision===ANALYSIS_REVISION&&hasEvidence(f)&&!!f.frames?.length;}
 export const THRESHOLD = 70;
@@ -11,7 +11,7 @@ import {words,textSimilarity} from './text-match.js';
 import {comparisonText} from './screen-text.js';
 import {fingerprint,createFrameFingerprint,frameMatch,localFrameMatch,visualSimilarity,usableVisualFrame,unmatchedVisualEstimate} from './visual-match.js';
 export {words,textSimilarity,fingerprint,frameMatch,localFrameMatch,visualSimilarity};
-export function textQuality(text){const all=words(text),candidates=all.filter(t=>/[a-z]/.test(t)),meaningful=candidates.filter(t=>/^[a-z']{2,}$/.test(t));return{all,meaningful,unique:new Set(meaningful).size,ratio:candidates.length?meaningful.length/candidates.length:0};}
+export function textQuality(text){const all=words(text),candidates=all.filter(t=>/[a-z]/.test(t)),meaningful=candidates.filter(t=>/^[a-z']{2,}$/.test(t)||t==='a'||t==='i');return{all,meaningful,unique:new Set(meaningful).size,ratio:candidates.length?meaningful.length/candidates.length:0};}
 export function reliableText(text){const q=textQuality(text);return q.meaningful.length>=12&&q.ratio>=.85&&q.unique>=8;}
 export function hasEvidence(f){const e=f?.evidence,n=f?.frames?.length??e?.sampleCount;if(!Number.isInteger(n)||n<1||n>180||e?.version!==1||e.sampleCount!==n||!Array.isArray(e.sampleTimes)||e.sampleTimes.length!==n)return false;let previous=-1;for(const time of e.sampleTimes){if(!Number.isFinite(time)||time<0||time>=f.duration||time<=previous)return false;previous=time;}for(const key of ['subtitleFrames','overlayFrames'])if(!Array.isArray(e[key])||new Set(e[key]).size!==e[key].length||!e[key].every(i=>Number.isInteger(i)&&i>=0&&i<n))return false;if(e.textSamples!==undefined&&(!Array.isArray(e.textSamples)||e.textSamples.length>n||new Set(e.textSamples.map(x=>x?.frame)).size!==e.textSamples.length||!e.textSamples.every(x=>x&&Number.isInteger(x.frame)&&x.frame>=0&&x.frame<n&&['subtitles','overlays'].every(k=>typeof x[k]==='string'&&x[k].length<=500)&&(x.interfaceText===undefined||typeof x.interfaceText==='string'&&x.interfaceText.length<=500)&&(x.overlayEvidence===undefined||typeof x.overlayEvidence==='string'&&x.overlayEvidence.length<=500)&&['subtitleConfidence','overlayConfidence'].every(k=>x[k]===undefined||Number.isFinite(x[k])&&x[k]>=0&&x[k]<=100))))return false;return true;}
 function textReliable(f,overlay){if(!hasEvidence(f))return false;const list=f.evidence[overlay?'overlayFrames':'subtitleFrames'],text=comparisonText(overlay?f.overlays:f.subtitles);if(list.length<3)return false;if(reliableText(text))return true;
@@ -84,7 +84,7 @@ export function explainEvidence(video,template,row){
  if(valid.length<12)gaps.push('有效英文词数少于12');if(unique<8)gaps.push('不同有效词少于8');if(ratio<.85)gaps.push('有效英文词比例低于85%');
  if(!Number.isInteger(n)||!Number.isInteger(seen))gaps.push('未保存文字出现在哪些抽样画面的记录');else if(seen<3)gaps.push('文字仅出现在'+seen+'/'+n+'张抽样画面中，至少需'+3+'张');
  const status=f[key==='subtitle'?'subtitleStatus':'overlayStatus'];if(status==='none')gaps.push('被标记为没有'+labels[key]);else if(status!=='ok'&&!gaps.length&&!textReliable(f,key==='overlay'))gaps.push('识别状态未确认');
- return label+'：'+tokens.length+'词、'+unique+'个不同有效词，有效英文词占'+Math.round(ratio*100)+'%'+(Number.isInteger(n)&&Number.isInteger(seen)?'，'+seen+'/'+n+'张画面识别到文字':'')+'。'+(gaps.length?'未达标：'+gaps.join('；')+'。':'这些数量条件已满足。');};
+ return label+'：'+tokens.length+'词、'+unique+'个不同有效词，有效英文词占'+(ratio*100).toFixed(1)+'%'+(Number.isInteger(n)&&Number.isInteger(seen)?'，'+seen+'/'+n+'张画面识别到文字':'')+'。'+(gaps.length?'未达标：'+gaps.join('；')+'。':'这些数量条件已满足。');};
  for(const key of ['subtitle','overlay'])if(!Number.isFinite(row[key]))result[key]=row.states?.[key]==='none'?'上传视频和模板均标记为没有'+labels[key]+'，本项不参与比较，不是识别失败。':side(video,'上传视频「'+(video.name||'此视频')+'」',key)+'\n'+side(template,'模板「'+(template.name||'对应模板')+'」',key)+'\n处理：已有模板抽样数据直接复用；缺少模板数据时，重新审核会自动准备。文字太少或太小无法辨认时，本项暂不计分，不要求为了凑词数修改视频。';
  if(!Number.isFinite(row.visual)){
  const sample=f=>f.frames?.length??f.evidence?.sampleCount;

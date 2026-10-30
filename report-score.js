@@ -24,9 +24,10 @@ export function dimensionReason(report,key){
  if(!reason)return report.state==='uploading'?'上传完成后进行比对。':report.state==='processing'?'正在识别，完成后显示分数。':'这份报告未保存该项的具体原因，需要重新审核。';
  if(key==='bgm')return '未取得可比的纯音乐音轨，无法比较BGM；不代表视频没有音乐。';
  if(key==='visual')return report.best?.rawVisual===0||/没有找到.*匹配|未达到可靠匹配/.test(reason)?'已比对画面，但未确认相似片段；不按0%处理，未计入平均。':'视频或模板未取得足够画面，无法比较；未计入平均。';
+ if(/仅提取到购票界面文字/.test(reason))return '只识别到购票界面文字，未取得可比的'+(key==='subtitle'?'字幕':'花字')+'。';
  const summaries=reason.split('\n').filter(line=>line&&!line.startsWith('处理：')&&!line.includes('这些数量条件已满足。')).map(line=>{
   const side=line.startsWith('模板')?'模板：':line.startsWith('上传视频')?'上传视频：':'',parts=[];
-  const count=line.match(/：(\d+)词/),coverage=line.match(/文字仅出现在(\d+)\/(\d+)张/),ratio=line.match(/有效英文词占(\d+)%/);
+  const count=line.match(/：(\d+)词/),coverage=line.match(/文字仅出现在(\d+)\/(\d+)张/),ratio=line.match(/有效英文词占(\d+(?:\.\d+)?)%/);
   if(/(?:有效英文)?词数少于12/.test(line))parts.push(count?'只识别到'+count[1]+'个词':'识别到的词数不足');
   else if(/不同有效词少于8/.test(line))parts.push('不同词不足8个');
   if(coverage)parts.push('仅在'+coverage[1]+'张画面识别到文字');
