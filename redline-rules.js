@@ -1,5 +1,5 @@
 import {contentChecks} from './content-checks.js';
-export const REDLINE_VERSION='uk-content-20261028-9';
+export const REDLINE_VERSION='uk-content-20261030-10';
 const operators='GWR|LNER|Avanti(?: West Coast)?|ScotRail|Thameslink|Southern|Northern|South Western Railway|Greater Anglia|Chiltern Railways|Elizabeth line';
 // These are review cues from the new screenshots, not automatic compliance verdicts.
 export const REDLINES=[
