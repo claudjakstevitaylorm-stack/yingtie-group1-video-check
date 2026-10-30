@@ -1,6 +1,8 @@
 // Compare both complete texts: a short shared fragment cannot stand in for a full script.
 export function words(t){return (t||'').toLowerCase().replace(/[^a-z0-9' ]/g,' ').split(/\s+/).filter(Boolean);}
-export function tokenMatch(a,b){if(a===b)return true;if(Math.min(a.length,b.length)<5||Math.abs(a.length-b.length)>1)return false;let i=0,j=0,errors=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue;}if(++errors>1)return false;if(a.length>=b.length)i++;if(b.length>=a.length)j++;}return errors+(a.length-i)+(b.length-j)<=1;}
+// Only tolerate recognisable OCR substitutions, not arbitrary real-word edits.
+export function tokenMatch(a,b){if(a===b)return true;if(Math.min(a.length,b.length)<4)return false;const normalize=t=>t.toLowerCase().replace(/0/g,'o').replace(/[1|]/g,'l');if(normalize(a)===normalize(b))return true;const ambiguous=t=>normalize(t).replace(/[il]/g,'!');return /[01|]/.test(a+b)&&ambiguous(a)===ambiguous(b);}
+
 const common=new Set('a an the of to in on at by for and or but is are was were be been being it its this that these those you your we our they their i my with as from so if than then'.split(' '));
 const weight=t=>common.has(t)?.25:1;
 export function textSimilarity(a,b){const x=words(a),y=words(b);if(!x.length||!y.length)return null;let previous=new Float64Array(y.length+1);for(const word of x){const current=new Float64Array(y.length+1);for(let j=1;j<=y.length;j++)current[j]=Math.max(previous[j],current[j-1],tokenMatch(word,y[j-1])?previous[j-1]+Math.min(weight(word),weight(y[j-1])):0);previous=current;}const aligned=2*previous[y.length]/(x.reduce((s,t)=>s+weight(t),0)+y.reduce((s,t)=>s+weight(t),0));

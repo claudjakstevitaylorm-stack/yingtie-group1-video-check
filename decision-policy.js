@@ -9,4 +9,4 @@ export function assessDimensions(row,{exact=false}={}){
  const averageExceeded=average!==null&&average>AVERAGE_LIMIT;
  return{status:exact||exceeded.length||averageExceeded?'fail':complete?'pass':'review',score:average,averageScore:average,complete,exceeded,averageExceeded,missing:DIMENSIONS.filter(k=>!valid.includes(k)),qualifying:valid.filter(k=>row[k]<=DIMENSION_LIMIT)};
 }
-export function usesThreeDimensions(report){return report?.decision===DECISION_POLICY;}
+export function usesThreeDimensions(report){return report?.decision===DECISION_POLICY||/^clipguard-4-evidence-\d+-three-all-mean60$/.test(report?.algorithm||'');}

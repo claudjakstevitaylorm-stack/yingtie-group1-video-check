@@ -1,6 +1,6 @@
 // One fixed high-detail profile. Retry only execution failures, never switch
 // sampling profiles or keep rerolling OCR until a passing score appears.
-export const AUDIT_PROFILE='stored-video-enhanced-20261029-v2';
+export const AUDIT_PROFILE='stored-video-enhanced-20261030-v3';
 export async function auditWithRecovery({extract,evaluate,onProgress=()=>{}}){
  let lastError;
  for(let attempt=0;attempt<2;attempt++){

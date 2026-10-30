@@ -1,7 +1,7 @@
 import {workspaceDatabaseName} from './groups.js';
 import {AUDIT_PROFILE} from './audit-recovery.js';
 // Per-origin, per-browser storage. No task files are sent to another teammate.
-export const EXTRACTION_CACHE_REVISION='20261029-stored-v4';
+export const EXTRACTION_CACHE_REVISION='20261030-stored-v5';
 export const LOCAL_STORES=['templateFeatures','taskFiles','tasks','taskArtifacts'];
 export function openLocalDatabase(factory=indexedDB,group='1'){return new Promise((resolve,reject)=>{const r=factory.open(workspaceDatabaseName(group),1);r.onupgradeneeded=()=>{for(const name of LOCAL_STORES)if(!r.result.objectStoreNames.contains(name))r.result.createObjectStore(name,{keyPath:'id'});};r.onsuccess=()=>{r.result.onversionchange=()=>r.result.close();resolve(r.result);};r.onerror=()=>reject(r.error);r.onblocked=()=>reject(new Error('请关闭本网站的旧标签页后重新打开，以启用任务恢复'));});}
 export function taskSnapshot(q){const keys=['id','member','category','templateId','templateName','sharedId','templateSnapshotCaptured','videoUploaded','sourceSha','retrySourceId','retryVideoUrl','retryDownloaded','bgmMode','bgmFile','noSubtitle','noOverlay','mediaTimeout','state','blocked','userPaused'];const saved={name:q.file?.name,mime:q.file?.type,size:q.file?.size,modified:q.file?.lastModified,updatedAt:Date.now()};for(const key of keys)if(q[key]!==undefined)saved[key]=q[key];return saved;}

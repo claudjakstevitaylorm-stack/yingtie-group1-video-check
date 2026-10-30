@@ -1,17 +1,23 @@
 export const SUBTITLE_BOUNDARY=.64;
 // Standalone booking controls are evidence of an interface, not spoken captions.
-export function isInterfaceText(text){const s=text.trim().replace(/\s+/g,' ');return /^(?:buy tickets|train\s*[&+]\s*hotel cashback|total for\s+\d+\s+(?:adult|child)s?|add railcard|promo codes|available for (?:gbp|eur).*|no booking fees\s*[-–—|]\s*price promise|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+20\d{2}.*)$/i.test(s);}
+export function isInterfaceText(text){const s=text.trim().replace(/\s+/g,' ');return /^(?:summary|cost of this booking|original ticket price|booking fee|splittickets|promo code|total|you[’']re saving.*|booking!|.*charity no.*|railway 200 charities.*|20%\s*off UK train ticket|trains|coaches|flights|stays|single|return|open|season|unused|expired|(?:[£2]\s*)?today,? now|via\s*[|]?\s*avoid|my bookings|account|search|buy|fees|depart from|travel budget|buy tickets|find cheap tickets|station timetables|live departures.*|valid for \d+ days|view stops.*|choose your railcard|go to payment|promo code applied|train\s*[&+]\s*hotel cashback|total for\s+\d+\s+(?:adult|child)s?|add railcard|promo codes|available for (?:gbp|eur).*|[©&]?\s*no booking fees\s*[-–—|]\s*price promise|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+20\d{2}.*)$/i.test(s);}
 export function comparisonText(text){return (text||'').split(/\n+/).filter(t=>!isInterfaceText(t)).join('\n');}
-export function splitScreenText(data,height){
- const subtitles=[],overlays=[],unassigned=[],interfaceText=[];
+export function splitScreenText(data,height,options={}){
+ const subtitles=[],overlays=[],unassigned=[],interfaceText=[],subtitleConfidence=[],overlayConfidence=[];
  const lines=(data.blocks||[]).flatMap(b=>(b.paragraphs||[]).flatMap(p=>p.lines||[]));
  const anchors=lines.filter(l=>l.confidence>=65&&isInterfaceText(l.text||'')),sizes=anchors.map(l=>(l.bbox?.y1||0)-(l.bbox?.y0||0)).filter(n=>n>0).sort((a,b)=>a-b),uiHeight=sizes[Math.floor(sizes.length/2)]||0;
- for(const line of lines){const text=(line.text||'').trim();if(!text||!(line.confidence>=65))continue;const box=line.bbox,tokens=text.toLowerCase().match(/[a-z']+/g)||[],smallUI=anchors.length>=3&&uiHeight>0&&box&&box.y1-box.y0<=uiHeight*1.2&&tokens.length<=8;
+ for(const line of lines){const text=(line.text||'').trim();if(!text||!(line.confidence>=65))continue;const box=line.bbox,tokens=text.toLowerCase().match(/[a-z']+/g)||[],smallUI=anchors.length>=3&&uiHeight>0&&box&&box.y1-box.y0<=uiHeight*1.2&&tokens.length<=8&&box.y0>=Math.min(...anchors.map(l=>l.bbox?.y0??height))-uiHeight*2&&box.y1<=Math.max(...anchors.map(l=>l.bbox?.y1??0))+uiHeight*2;
  if(isInterfaceText(text)||smallUI){interfaceText.push(text);continue;}
- if(tokens.join('').length<6||tokens.filter(w=>w.length>=2).length<2&&!(tokens.length===1&&tokens[0].length>=6&&line.confidence>=85))continue;
+ if(tokens.join('').length<3||tokens.filter(w=>w.length>=2).length<2&&!(tokens.length===1&&tokens[0].length>=3&&line.confidence>=90))continue;
  if(!box||!Number.isFinite(box.y0)||!Number.isFinite(box.y1)||!(height>0)){unassigned.push(text);continue;}
- ((box.y0+box.y1)/2>=height*SUBTITLE_BOUNDARY?subtitles:overlays).push(text);
+ const center=(box.y0+box.y1)/2/height,font=(box.y1-box.y0)/height,caption=options.captionStyle?Math.abs(font-options.captionStyle.font)<=Math.max(.008,options.captionStyle.font*.35)&&center>=options.captionStyle.top-.04&&center<=options.captionStyle.bottom+.04:center>=SUBTITLE_BOUNDARY&&font<(options.width?Math.min(.12,.075*Math.max(1,options.width/height)):.12);
+ (caption?subtitles:overlays).push(text);(caption?subtitleConfidence:overlayConfidence).push(line.confidence);
  }
  if(!lines.length&&data.text?.trim())unassigned.push(data.text.trim());
- return{subtitles:subtitles.join('\n'),overlays:overlays.join('\n'),interfaceText:interfaceText.join('\n'),unassigned:unassigned.join('\n')};
+ return{subtitles:subtitles.join('\n'),overlays:overlays.join('\n'),interfaceText:interfaceText.join('\n'),unassigned:unassigned.join('\n'),confidence:{subtitles:subtitleConfidence.length?Math.min(...subtitleConfidence):0,overlays:overlayConfidence.length?Math.min(...overlayConfidence):0}};
 }
+
+// Learn a recurring lower-caption style only when several different phrases support it.
+export function inferCaptionStyle(samples,height){const groups=new Map();for(const sample of samples){const interfaceLines=new Set(splitScreenText(sample,height).interfaceText.split('\n'));const lines=(sample.blocks||[]).flatMap(b=>(b.paragraphs||[]).flatMap(p=>p.lines||[]));for(const l of lines){if(l.confidence<75||!l.bbox||interfaceLines.has((l.text||'').trim())||isInterfaceText(l.text||''))continue;const box=l.bbox,center=(box.y0+box.y1)/2/height,font=(box.y1-box.y0)/height;if(center<.64||font>.065||font<.008||(l.text.match(/[a-z]{2,}/gi)||[]).length<3)continue;const key=Math.round(font/.008),group=groups.get(key)||{fonts:[],centers:[],phrases:new Set(),frames:new Set()};group.fonts.push(font);group.centers.push(center);group.phrases.add((l.text||'').toLowerCase().replace(/[^a-z ]/g,'').trim());group.frames.add(sample.frame);groups.set(key,group);}}const choices=[...groups.values()].filter(g=>g.frames.size>=3&&g.phrases.size>=3).sort((a,b)=>b.frames.size-a.frames.size||b.phrases.size-a.phrases.size);if(!choices.length)return null;const g=choices[0];return{font:g.fonts.reduce((a,b)=>a+b,0)/g.fonts.length,top:Math.min(...g.centers),bottom:Math.max(...g.centers)};}
+
+export function confirmedScreenSamples(samples){const counts=new Map(),key=l=>(l.text||'').toLowerCase().replace(/[^a-z0-9]/g,'');for(const sample of samples){for(const text of new Set((sample.blocks||[]).flatMap(b=>(b.paragraphs||[]).flatMap(p=>p.lines||[])).map(key)))counts.set(text,(counts.get(text)||0)+1);}return samples.map(sample=>({...sample,blocks:(sample.blocks||[]).map(b=>({...b,paragraphs:(b.paragraphs||[]).map(p=>({...p,lines:(p.lines||[]).filter(l=>l.confidence>=80||(counts.get(key(l))||0)>=2)}))}))}));}

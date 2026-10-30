@@ -12,9 +12,9 @@ const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GE
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{...CORS,'Content-Type':'application/json;charset=utf-8','Cache-Control':'no-store'}});
 function fail(message,status=400){const e=new Error(message);e.status=status;throw e;}
 async function body(request){
- if(Number(request.headers.get('Content-Length'))>800000)fail('请求内容过大',413);
+ if(Number(request.headers.get('Content-Length'))>1500000)fail('请求内容过大',413);
  const reader=request.body?.getReader();if(!reader)fail('缺少请求内容');const chunks=[];let size=0;
- while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>800000){await reader.cancel();fail('请求内容过大',413);}chunks.push(value);}
+ while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1500000){await reader.cancel();fail('请求内容过大',413);}chunks.push(value);}
  const all=new Uint8Array(size);let offset=0;for(const c of chunks){all.set(c,offset);offset+=c.byteLength;}
  try{return JSON.parse(new TextDecoder().decode(all));}catch{fail('请求格式不正确');}
 }
