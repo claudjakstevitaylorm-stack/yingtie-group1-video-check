@@ -3,7 +3,7 @@ import {extractAudioQuality,validAudioQuality} from './audio-quality.js';
 import {prepareVideoBlob,waitForMedia,seekVideoFrame} from './media-reader.js';
 import {bgmSimilarity,validBgm,extractBgm} from './bgm.js';
 export const VERSION = 'clipguard-4';
-export const RULE_VERSION = 'clipguard-4-evidence-9-three-all-mean60';
+export const RULE_VERSION = 'clipguard-4-evidence-10-three-all-mean60';
 export const ANALYSIS_REVISION='20261030-spatial-ocr-3';
 export function currentReference(f){return f?.version===VERSION&&f.analysisRevision===ANALYSIS_REVISION&&hasEvidence(f)&&!!f.frames?.length;}
 export const THRESHOLD = 70;
