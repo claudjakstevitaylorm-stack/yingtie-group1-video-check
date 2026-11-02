@@ -1,3 +1,4 @@
+import {recoveryEligible} from './recovery-policy.js';
 import {createPendingRecovery} from './pending-recovery.js';
 import {usesThreeDimensions} from './decision-policy.js';
 import {groupLabel,validGroup,isGroupManager} from './groups.js';
@@ -6,7 +7,7 @@ import {auditWithRecovery} from './audit-recovery.js';
 import {prepareAuditUpload,auditMedia} from './audit-media.js';
 import {redlineBadge,redlinePanel,redlineChecklist,redlineResult,reviewOutcome} from './redline-ui.js';
 import {reportScore,scoreLabel,reviewOpinion,dimensionReason,scoreBasis} from './report-score.js';
-import {VERSION,RULE_VERSION,extract,compare,validFeature,initialize} from './engine.js';
+import {VERSION,RULE_VERSION,ANALYSIS_REVISION,extract,compare,validFeature,initialize} from './engine.js';
 import {TEMPLATE_CATEGORIES,ALL_CATEGORIES,UNCATEGORIZED} from './categories.js';
 import {composeTemplateName,templateNameParts} from './template-name.js';
 import {SHARED_API} from './shared-config.js';
@@ -107,7 +108,7 @@ async function resumePendingRecovery(){
  if(!pendingRecovery){const epoch=contextEpoch;pendingRecovery=createPendingRecovery({
   canStart:()=>epoch===contextEpoch&&sessionReady&&!switchingGroup&&!busy&&!document.hidden&&mode==='check'&&!queue.some(q=>!q.done),
   candidates:async()=>{const data=await apiCall('/api/reviews/refresh',{method:'POST',body:{}});return(data.candidates||[]).filter(r=>r.member===member||manager);},
-  load:async item=>{const r=await apiCall('/api/records/'+item.id);if(r.automaticRecovery&&Date.parse(r.automaticRecovery.expiresAt)>Date.now())return{busy:true};if(r.state!=='complete'||r.status!=='review'||r.algorithm===RULE_VERSION&&r.automaticReview?.source==='stored-video-recovery')return null;const meta=templates.find(t=>t.id===item.templateId&&t.sha===item.referenceSha&&t.enabled!==false);if(meta&&!meta.featureReady)await ensureTemplateReference(meta.id);if(epoch!==contextEpoch)throw Error('组别已切换');const claim=await apiCall('/api/reviews/claim',{method:'POST',body:{id:item.id}});if(!claim.claimed)return{busy:true};item.claimId=claim.claimId;return auditMedia({file:{name:item.name,type:item.mime}},videoURL(item.videoUrl));},
+  load:async item=>{const r=await apiCall('/api/records/'+item.id);if(r.automaticRecovery&&Date.parse(r.automaticRecovery.expiresAt)>Date.now())return{busy:true};if(r.state!=='complete'||r.status!=='review'||!recoveryEligible(r,{version:VERSION,ruleVersion:RULE_VERSION,analysisRevision:ANALYSIS_REVISION}))return null;const meta=templates.find(t=>t.id===item.templateId&&t.sha===item.referenceSha&&t.enabled!==false);if(meta&&!meta.featureReady)await ensureTemplateReference(meta.id);if(epoch!==contextEpoch)throw Error('组别已切换');const claim=await apiCall('/api/reviews/claim',{method:'POST',body:{id:item.id}});if(!claim.claimed)return{busy:true};item.claimId=claim.claimId;return auditMedia({file:{name:item.name,type:item.mime}},videoURL(item.videoUrl));},
   analyze:(file,item)=>{let heartbeat=Date.now();return extract(file,()=>{if(epoch===contextEpoch&&Date.now()-heartbeat>30000){heartbeat=Date.now();void apiCall('/api/reviews/claim',{method:'POST',body:{id:item.id,claimId:item.claimId}}).catch(()=>{});}},{enhanced:true,mediaTimeout:90000});},
   submit:async(feature,item)=>{if(epoch!==contextEpoch)throw Error('组别已切换');for(let i=0;i<10;i++){const result=await apiCall('/api/reviews/refresh',{method:'POST',body:{feature,fresh:true,claimId:item.claimId}});if(!result.hasMore)break;}},
   onState:(id,state,error)=>{if(epoch!==contextEpoch)return;recoveryState.set(id,{state,error:error?.message});render();if(state==='complete'||state==='failed')void refreshShared(true);}
