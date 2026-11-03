@@ -35,3 +35,11 @@ test('fresh recovery upgrades old reference features only for the same source vi
 test('new revision completed recovery does not run endlessly and resolved records are preserved',async()=>{
  const env=createLocalEnv(),item=add(env,{algorithm:RULE_VERSION}),old=JSON.parse(env.sqlite.prepare('SELECT report FROM shared_uploads WHERE id=?').get(item.id).report);old.automaticReview={source:'stored-video-recovery',ruleVersion:RULE_VERSION};env.sqlite.prepare('UPDATE shared_uploads SET report=? WHERE id=?').run(JSON.stringify(old),item.id);assert.equal((await claim(env,item.id)).claimed,false);assert.equal((await(await refresh(env)).json()).candidates.length,0);
 });
+
+test('a legacy file-read failure with no stored feature SHA recovers only from checksum-bound cloud bytes',async()=>{
+ const env=createLocalEnv(),item=add(env,{algorithm:RULE_VERSION}),r={status:'review',score:null,errors:['A requested file or directory could not be found at the time an operation was processed.'],comparisons:[],algorithm:RULE_VERSION};env.sqlite.prepare('UPDATE shared_uploads SET report=? WHERE id=?').run(JSON.stringify(r),item.id);
+ await env.BUCKET.put('videos/'+item.id,new Uint8Array([1,2,3]),{customMetadata:{sha:upload().sha,sourceSha:upload().sha}});
+ assert.ok((await(await refresh(env)).json()).candidates.some(c=>c.id===item.id));const lease=await claim(env,item.id);assert.equal(lease.claimed,true);
+ const submit=async f=>{const response=await registeredRequest(env,new Request('https://test/api/reviews/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({feature:f,fresh:true,id:item.id,claimId:lease.claimId})}));return response.json();};
+ assert.equal((await submit({...upload(),sha:'e'.repeat(64)})).updated,0);assert.equal((await submit(upload())).resolved,1);const saved=JSON.parse(env.sqlite.prepare('SELECT report FROM shared_uploads WHERE id=?').get(item.id).report);assert.equal(saved.sha,upload().sha);assert.equal(saved.status,'pass');assert.equal(saved.automaticRecovery,undefined);assert.equal((await claim(env,item.id)).claimed,false);
+});

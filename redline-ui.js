@@ -1,3 +1,4 @@
+import {executionFailure} from './recovery-policy.js';
 import {CONTENT_TEXT_RULES} from './content-checks.js';
 import {reviewOpinion} from './report-score.js';
 import {REDLINES,REDLINE_VERSION,scanRedlines} from './redline-rules.js';
@@ -20,6 +21,7 @@ export function redlineResult(record){
 }
 
 export function reviewOutcome(record){
+ if(record.state==='complete'&&executionFailure(record))return{label:'处理失败',tone:'review',opinion:'视频已上传，读取或识别未完成；系统将从已上传副本自动恢复。'};
  if(record.state==='uploading')return{label:'上传中',tone:'review',opinion:''};
  if(record.state==='processing')return{label:'审核中',tone:'review',opinion:''};
  if(record.state==='failed')return{label:'上传失败',tone:'fail',opinion:'视频未处理成功，请重新提交'};

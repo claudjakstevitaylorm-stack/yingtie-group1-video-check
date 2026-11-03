@@ -24,3 +24,9 @@ test('database candidate filtering and browser eligibility agree across current,
   cases.forEach((r,i)=>assert.equal(actual.has('case'+i),recoveryEligible(r,p,{fresh}),JSON.stringify({current,fresh,r})));
  }
 });
+
+test('legacy execution-error reports without features are recoverable but never treated as audited',async()=>{
+ const {executionFailure}=await import('../recovery-policy.js'),{reviewOutcome}=await import('../redline-ui.js');
+ const r={algorithm:policy.ruleVersion,status:'review',state:'complete',errors:['A requested file or directory could not be found at the time an operation was processed.'],comparisons:[]};assert.equal(executionFailure(r),true);assert.equal(recoveryEligible(r,policy),true);assert.equal(reviewOutcome(r).label,'处理失败');assert.equal(recoveryEligible({...r,algorithm:'unknown'},policy),false);
+ const env=createLocalEnv();env.sqlite.prepare('INSERT INTO shared_uploads(id,member,name,kind,state,size,mime,created_at,updated_at,owner_hash,video_ready,status,report,team) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('error','test','sample.mp4','video','complete',1,'video/mp4','now','now','a'.repeat(64),1,'review',JSON.stringify(r),'1');const selection=recoverySelection(policy);assert.equal(env.sqlite.prepare('SELECT id FROM shared_uploads WHERE '+selection.sql).all('1',...selection.args).length,1);
+});
