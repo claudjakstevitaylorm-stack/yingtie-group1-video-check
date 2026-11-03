@@ -195,5 +195,6 @@ test('server enforces the composite threshold instead of client verdicts',async(
  assert.equal(pass.status,'pass');assert.equal(pass.score,50/3);assert.equal(pass.best.bgm,null);
  const text=alpha.split(' ').slice(0,13).concat(colors.split(' ').slice(13)).join(' '),fail=await run(make({...feature,frames:[...evidenceFrames('a',14),...evidenceFrames('b',6)],subtitles:text,overlays:text}));
  assert.equal(fail.status,'pass');assert.ok(fail.best.visual<=70&&fail.best.subtitle<=70&&fail.best.overlay<=70);assert.ok(fail.score>60);assert.equal(fail.best.averageExceeded,false);
- const over=await run(make({...low,frames:[...evidenceFrames('a',16),...evidenceFrames('b',4)]}));assert.equal(over.status,'fail');assert.ok(over.score<60);assert.deepEqual(over.best.exceeded,['visual']);
+ const over=await run(make({...low,frames:[...evidenceFrames('a',16),...evidenceFrames('b',4)]}));assert.equal(over.status,'pass');assert.ok(over.best.visual>70);assert.ok(over.score<70);
+ const duplicate=await run(make({...feature,frames:evidenceFrames('a',20)}));assert.equal(duplicate.status,'fail');assert.ok(duplicate.score>=70);
 });
