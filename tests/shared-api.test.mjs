@@ -74,12 +74,12 @@ test('invalid new selections are rejected and started tasks keep their template 
  }
 });
 
-test('server rejects over-limit items under the three-dimension rule with separate subtitle and decorative text scores',async()=>{
+test('server accepts a passing composite under the three-dimension rule with separate subtitle and decorative text scores',async()=>{
  const env=createLocalEnv(),ref=await uploaded(env,'template',A,{category:'Avanti'});
  const reference={...feature,sha:'e'.repeat(64),overlays:colors,bgm:{status:'review',source:'unconfirmed',frames:[]}};
  await env.BUCKET.put('videos/'+ref.id,new Blob([bytes]).stream(),{customMetadata:{sha:reference.sha}});await ref.c('/api/uploads/'+ref.id+'/finalize','POST',{feature:reference});
  const video=await uploaded(env,'video',B,{category:'Avanti',templateId:ref.id});const result=await(await video.c('/api/uploads/'+video.id+'/finalize','POST',{feature:{...feature,bgm:{status:'review',source:'unconfirmed',frames:[]}}})).json();
- assert.equal(result.record.status,'fail');assert.equal(result.record.best.visual,100);assert.equal(result.record.best.subtitle,100);assert.equal(result.record.best.overlay,0);assert.equal(result.record.best.bgm,null);assert.deepEqual(result.record.qualifying,['overlay']);assert.equal(result.record.score,200/3);assert.equal(result.record.best.decisionScore,200/3);assert.equal(result.record.decision,'three-dimensions-all70-mean60');assert.equal(result.record.overlays,feature.overlays);
+ assert.equal(result.record.status,'pass');assert.equal(result.record.best.visual,100);assert.equal(result.record.best.subtitle,100);assert.equal(result.record.best.overlay,0);assert.equal(result.record.best.bgm,null);assert.deepEqual(result.record.qualifying,['overlay']);assert.equal(result.record.score,200/3);assert.equal(result.record.best.decisionScore,200/3);assert.equal(result.record.decision,'three-dimensions-all70-mean60');assert.equal(result.record.overlays,feature.overlays);
 });
 
 test('templates enter the library without feature extraction, review status or a content decision',async()=>{
@@ -186,7 +186,7 @@ test('template summaries omit large feature arrays and single-template reads ret
 test('registration with the same local task ID is idempotent, while other owners cannot reuse it',async()=>{const env=createLocalEnv(),c=client(env,A),id=crypto.randomUUID(),data={clientUploadId:id,name:'local.mov',member:'甲',size:10,mime:'video/quicktime',kind:'video'};const first=await(await c('/api/uploads','POST',data)).json();const again=await(await c('/api/uploads','POST',data)).json();assert.equal(first.id,id);assert.equal(again.id,id);assert.equal(env.sqlite.prepare('SELECT COUNT(*) AS n FROM shared_uploads').get().n,1);assert.equal((await client(env,B)('/api/uploads','POST',data)).status,409);await c(first.uploadUrl,'PUT',bytes,{'X-Video-Sha256':sha});const resumed=await(await c('/api/uploads','POST',data)).json();assert.equal(resumed.alreadyUploaded,true);assert.equal(resumed.state,'processing');assert.equal(resumed.id,id);});
 test('seven different uploaders use separate local task IDs and share results without queue ownership conflicts',async()=>{const env=createLocalEnv(),ids=await Promise.all(Array.from({length:7},async(_,i)=>{const c=client(env,String(i+1).repeat(64)),id=crypto.randomUUID(),r=await c('/api/uploads','POST',{clientUploadId:id,name:'batch-'+i+'.mov',member:'组员'+i,size:10,mime:'video/quicktime',kind:'video'});assert.equal(r.status,201);const init=await r.json();assert.equal((await c(init.uploadUrl,'PUT',bytes,{'X-Video-Sha256':sha})).status,200);return id;}));assert.equal(new Set(ids).size,7);assert.equal((await(await client(env)('/api/records')).json()).total,7);});
 
-test('server enforces three-item limits and the actual arithmetic mean instead of client verdicts',async()=>{
+test('server enforces the composite threshold instead of client verdicts',async()=>{
  const make=o=>{const f=evidenceFeature(o);f.evidence=proof(f.frames);return f;};
  const env=createLocalEnv(),t=await uploaded(env,'template'),reference=make({...feature,sha:'d'.repeat(64),frames:evidenceFrames('a',20)});
  await env.BUCKET.put('videos/'+t.id,new Blob([bytes]).stream(),{customMetadata:{sha:reference.sha}});await t.c('/api/uploads/'+t.id+'/finalize','POST',{feature:reference});
@@ -194,6 +194,6 @@ test('server enforces three-item limits and the actual arithmetic mean instead o
  const low=make({...feature,frames:[...evidenceFrames('a',10),...evidenceFrames('b',10)],subtitles:colors,overlays:colors,bgm:{status:'none',source:'not-audited',frames:[]}}),pass=await run(low);
  assert.equal(pass.status,'pass');assert.equal(pass.score,50/3);assert.equal(pass.best.bgm,null);
  const text=alpha.split(' ').slice(0,13).concat(colors.split(' ').slice(13)).join(' '),fail=await run(make({...feature,frames:[...evidenceFrames('a',14),...evidenceFrames('b',6)],subtitles:text,overlays:text}));
- assert.equal(fail.status,'fail');assert.ok(fail.best.visual<=70&&fail.best.subtitle<=70&&fail.best.overlay<=70);assert.ok(fail.score>60);assert.equal(fail.best.averageExceeded,true);
+ assert.equal(fail.status,'pass');assert.ok(fail.best.visual<=70&&fail.best.subtitle<=70&&fail.best.overlay<=70);assert.ok(fail.score>60);assert.equal(fail.best.averageExceeded,false);
  const over=await run(make({...low,frames:[...evidenceFrames('a',16),...evidenceFrames('b',4)]}));assert.equal(over.status,'fail');assert.ok(over.score<60);assert.deepEqual(over.best.exceeded,['visual']);
 });
