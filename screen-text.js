@@ -10,7 +10,10 @@ export function splitScreenText(data,height,options={}){
  if(isInterfaceText(text)||smallUI){interfaceText.push(text);continue;}
  if(tokens.join('').length<3||tokens.filter(w=>w.length>=2).length<2&&!(tokens.length===1&&tokens[0].length>=3&&line.confidence>=90))continue;
  if(!box||!Number.isFinite(box.y0)||!Number.isFinite(box.y1)||!(height>0)){unassigned.push(text);continue;}
- const center=(box.y0+box.y1)/2/height,font=(box.y1-box.y0)/height,caption=options.captionStyle?Math.abs(font-options.captionStyle.font)<=Math.max(.008,options.captionStyle.font*.35)&&center>=options.captionStyle.top-.04&&center<=options.captionStyle.bottom+.04:center>=SUBTITLE_BOUNDARY&&font<(options.width?Math.min(.12,.075*Math.max(1,options.width/height)):.12);
+ const center=(box.y0+box.y1)/2/height,font=(box.y1-box.y0)/height;
+ const matchesCaptionStyle=options.captionStyle&&Math.abs(font-options.captionStyle.font)<=Math.max(.008,options.captionStyle.font*.35)&&center>=options.captionStyle.top-.04&&center<=options.captionStyle.bottom+.04;
+ const isLowerCaption=center>=SUBTITLE_BOUNDARY&&font<(options.width?Math.min(.12,.075*Math.max(1,options.width/height)):.12);
+ const caption=matchesCaptionStyle||isLowerCaption;
  (caption?subtitles:overlays).push(text);(caption?subtitleConfidence:overlayConfidence).push(line.confidence);
  }
  if(!lines.length&&data.text?.trim())unassigned.push(data.text.trim());
