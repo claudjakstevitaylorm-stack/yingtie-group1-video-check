@@ -1,6 +1,6 @@
 import {executionFailure} from './recovery-policy.js';
 import {CONTENT_TEXT_RULES} from './content-checks.js';
-import {reviewOpinion} from './report-score.js';
+import {reviewOpinion,reportScore} from './report-score.js';
 import {REDLINES,REDLINE_VERSION,scanRedlines} from './redline-rules.js';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function redlineHints(record){return record?.redlineHints?.version===REDLINE_VERSION?record.redlineHints:scanRedlines(record);}
@@ -25,6 +25,10 @@ export function reviewOutcome(record){
  if(record.state==='uploading')return{label:'上传中',tone:'review',opinion:''};
  if(record.state==='processing')return{label:'审核中',tone:'review',opinion:''};
  if(record.state==='failed')return{label:'上传失败',tone:'fail',opinion:'视频未处理成功，请重新提交'};
+ const score=reportScore(record);
+ if(record.state==='complete'&&Number.isFinite(score)&&!record.best?.exact){
+  record={...record,status:score<70?'pass':'fail'};
+ }
  const red=redlineResult(record);
  if(record.status==='fail'||red.tone==='fail')return{label:'不通过',tone:'fail',opinion:[record.status==='fail'?reviewOpinion(record):'',red.tone==='fail'?red.opinion:''].filter(Boolean).join('；')};
  if(record.status==='pass'&&red.tone==='pass')return{label:'通过',tone:'pass',opinion:''};
